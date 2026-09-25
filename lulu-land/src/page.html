@@ -1,0 +1,82 @@
+<title>룰루랜드</title>
+<style>
+/*FONTFACE*/
+:root {
+  color-scheme: dark;
+  --ground: #2b1838;
+  --ground-dot: #3a2449;
+  --frame: #ff8fb3;
+  --frame-dark: #e0648f;
+  --ink: #3b1f3a;
+  --text: #ffe9f1;
+  --muted: #c9a9c6;
+  --mint: #8fe3c0;
+  --gold: #ffc857;
+}
+html, body { background: var(--ground); }
+body {
+  margin: 0;
+  color: var(--text);
+  font: 13px/1.6 Galmuri9, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  background-color: var(--ground);
+  background-image: radial-gradient(var(--ground-dot) 1px, transparent 1.5px);
+  background-size: 16px 16px;
+  padding-inline: 16px;
+  padding-block: 20px 28px;
+}
+.wrap { max-width: 960px; margin: 0 auto; display: grid; gap: 14px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+h1 {
+  margin: 0; font: 700 24px/1.2 Galmuri11, system-ui, sans-serif; color: var(--frame);
+  text-shadow: 2px 0 var(--ink), -2px 0 var(--ink), 0 2px var(--ink), 0 -2px var(--ink), 3px 3px 0 #1c0f25;
+  letter-spacing: 1px;
+}
+header p { margin: 0; color: var(--muted); font-family: Galmuri9, system-ui, sans-serif; }
+.screen {
+  position: relative;
+  background: var(--frame);
+  padding: 6px;
+  box-shadow: 0 0 0 3px var(--ink), 6px 6px 0 3px #1c0f25;
+}
+canvas {
+  display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; height: auto;
+  image-rendering: pixelated; image-rendering: crisp-edges;
+  background: #ffe4ee; touch-action: none; outline: none;
+  box-shadow: inset 0 0 0 2px var(--frame-dark);
+}
+canvas:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.keys { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-family: Galmuri9, system-ui, sans-serif; }
+.keys li { display: flex; align-items: center; gap: 6px; }
+kbd {
+  font: 11px/1 Galmuri11, ui-monospace, monospace; color: var(--ink); background: #fff3f8;
+  padding: 4px 6px 5px; box-shadow: 0 2px 0 var(--frame-dark), 0 0 0 1px var(--ink);
+}
+footer { color: #9b7f99; font-size: 11px; font-family: Galmuri7, Galmuri9, system-ui, sans-serif; }
+footer a { color: var(--mint); }
+@media (max-width: 520px) {
+  h1 { font-size: 20px; }
+  .screen { padding: 4px; }
+}
+</style>
+<div class="wrap">
+  <header>
+    <h1>룰루랜드</h1>
+    <p>탕후루를 만들고, 설탕 코팅을 입히고, 룰루의 먹방을 보는 픽셀 테마파크</p>
+  </header>
+  <div class="screen">
+    <canvas id="game" width="1280" height="720" tabindex="0" aria-label="룰루랜드 게임 화면. 화면을 누르거나 키보드로 조작해요."></canvas>
+  </div>
+  <ul class="keys" aria-label="조작법">
+    <li><kbd>← →</kbd> 걷기</li>
+    <li><kbd>↑</kbd><kbd>Enter</kbd> 들어가기</li>
+    <li><kbd>1</kbd>~<kbd>8</kbd> 재료 꽂기</li>
+    <li><kbd>Space</kbd> 담그기 · 뽑기</li>
+    <li><kbd>Esc</kbd> 랜드로</li>
+    <li><kbd>M</kbd> 소리</li>
+    <li>화면을 눌러도 모두 돼요</li>
+  </ul>
+  <footer>팬 창작 게임입니다. 캐릭터·게임 콘셉트는 모바일 게임 「탕후루의 달인」(Tanghulu Master)의 룰루랜드에서 빌려 왔고, 그림과 코드는 모두 새로 만들었어요. 글꼴: 갈무리(Galmuri, SIL OFL 1.1). 진행 기록은 이 브라우저에만 저장돼요.</footer>
+</div>
+<script>
+/*GAME*/
+</script>
