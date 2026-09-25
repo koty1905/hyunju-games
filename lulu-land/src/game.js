@@ -78,7 +78,7 @@ const DEF = () => ({
   coins: 80, fans: 0,
   own: { outfit: ['apron'], hair: ['braids'], band: ['none'] },
   eq: { outfit: 'apron', hair: 'braids', band: 'none' },
-  ice: {}, dropBest: 0, made: 0, sound: true, crownGiven: false,
+  ice: {}, dropBest: 0, made: 0, music: true, sfx: true, crownGiven: false,
 });
 let G = DEF();
 function load() {
@@ -90,6 +90,7 @@ function load() {
       G.own = Object.assign(DEF().own, d.own || {});
       G.eq = Object.assign(DEF().eq, d.eq || {});
       G.ice = d.ice || {};
+      if (d.sound === false && d.music == null) { G.music = false; G.sfx = false; }
       return true;
     }
   } catch (e) { /* 저장소를 못 쓰면 새로 시작 */ }
@@ -98,84 +99,353 @@ function load() {
 function save() { try { localStorage.setItem(KEY, JSON.stringify(G)); } catch (e) { /* 무시 */ } }
 let hasSave = load();
 
-// ---------- 소리 (WebAudio 칩튠)
-const AU = { ac: null, master: null, music: null, next: 0, step: 0 };
+// ---------- 소리: WebAudio 칩튠 (장소별 배경음악 + 효과음)
+// 음악 버스: xf(곡 전환 크로스페이드) → duck(징글이 울릴 때 낮춤) → mus(음악 켜기/끄기) → out
+// 효과음 버스: fx(효과음 켜기/끄기) → out → 컴프레서 → 스피커
+const AU = { ac: null, out: null, mus: null, xf: null, duck: null, fx: null, waves: {}, noise: null, track: null, want: null, step: 0, next: 0, switching: false };
 function audio() {
-  if (AU.ac) { if (AU.ac.state === 'suspended') AU.ac.resume(); return; }
+  if (AU.ac) { if (AU.ac.state === 'suspended' && !document.hidden) AU.ac.resume(); return; }
   try {
     const AC = window.AudioContext || window.webkitAudioContext;
-    AU.ac = new AC();
-    AU.master = AU.ac.createGain(); AU.master.gain.value = G.sound ? .55 : 0; AU.master.connect(AU.ac.destination);
-    AU.music = AU.ac.createGain(); AU.music.gain.value = .32; AU.music.connect(AU.master);
-    AU.next = AU.ac.currentTime + .1;
-    setInterval(schedMusic, 60);
+    const ac = AU.ac = new AC();
+    const comp = ac.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.ratio.value = 4; comp.connect(ac.destination);
+    AU.out = ac.createGain(); AU.out.gain.value = .85; AU.out.connect(comp);
+    AU.mus = ac.createGain(); AU.mus.gain.value = G.music ? .5 : 0; AU.mus.connect(AU.out);
+    AU.duck = ac.createGain(); AU.duck.connect(AU.mus);
+    AU.xf = ac.createGain(); AU.xf.gain.value = 0; AU.xf.connect(AU.duck);
+    AU.fx = ac.createGain(); AU.fx.gain.value = G.sfx ? .9 : 0; AU.fx.connect(AU.out);
+    // 8비트 펄스파 (듀티 12.5%, 25%)
+    for (const [k, d] of [['p12', .125], ['p25', .25]]) {
+      const N = 40, re = new Float32Array(N), im = new Float32Array(N);
+      for (let n = 1; n < N; n++) re[n] = 2 / (n * Math.PI) * Math.sin(n * Math.PI * d);
+      AU.waves[k] = ac.createPeriodicWave(re, im);
+    }
+    AU.noise = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+    const ch = AU.noise.getChannelData(0);
+    for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
+    AU.next = ac.currentTime + .1;
+    setInterval(schedMusic, 50);
   } catch (e) { AU.ac = null; }
 }
-function setSound(on) {
-  G.sound = on; save();
-  if (AU.master) AU.master.gain.setTargetAtTime(on ? .55 : 0, AU.ac.currentTime, .02);
+document.addEventListener('visibilitychange', () => {
+  if (!AU.ac) return;
+  if (document.hidden) AU.ac.suspend(); else AU.ac.resume();
+});
+function setMusic(on) { G.music = on; save(); if (AU.mus) AU.mus.gain.setTargetAtTime(on ? .5 : 0, AU.ac.currentTime, .05); }
+function setSfx(on) { G.sfx = on; save(); if (AU.fx) AU.fx.gain.setTargetAtTime(on ? .9 : 0, AU.ac.currentTime, .03); }
+
+const WAVE = { sq: 'square', tri: 'triangle', saw: 'sawtooth', sin: 'sine' };
+// 음 하나: w 파형, v 음량, a 어택, r 릴리스, sus 지속 비율, slide 음높이 변화 배율, vib 비브라토 깊이, lp 로우패스
+function note(f, t, d, o = {}) {
+  const ac = AU.ac; if (!ac) return;
+  const w = o.w || 'sq', v = o.v != null ? o.v : .08, a = o.a != null ? o.a : .004, r = o.r != null ? o.r : .06, sus = o.sus != null ? o.sus : .7;
+  const osc = ac.createOscillator();
+  if (AU.waves[w]) osc.setPeriodicWave(AU.waves[w]); else osc.type = WAVE[w] || w;
+  osc.frequency.setValueAtTime(f, t);
+  if (o.slide && o.slide !== 1) osc.frequency.exponentialRampToValueAtTime(Math.max(20, f * o.slide), t + d);
+  const extra = [];
+  if (o.vib) {
+    const l = ac.createOscillator(), lg = ac.createGain();
+    l.frequency.value = o.vibRate || 6; lg.gain.value = f * o.vib;
+    l.connect(lg); lg.connect(osc.frequency); l.start(t); l.stop(t + d + r + .05); extra.push(l);
+  }
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(v, t + a);
+  g.gain.linearRampToValueAtTime(v * sus, t + Math.max(a, d));
+  g.gain.setTargetAtTime(0, t + Math.max(a, d), r / 3);
+  let node = osc;
+  if (o.lp) { const bf = ac.createBiquadFilter(); bf.type = 'lowpass'; bf.frequency.value = o.lp; osc.connect(bf); node = bf; }
+  node.connect(g); g.connect(o.dest || AU.fx);
+  osc.start(t); osc.stop(t + d + r + .05);
 }
-function tone(f, d, type = 'square', v = .08, slide = 1, delay = 0, dest) {
-  const a = AU.ac; if (!a || !G.sound) return;
-  const t = a.currentTime + delay;
-  const o = a.createOscillator(), g = a.createGain();
-  o.type = type; o.frequency.setValueAtTime(f, t);
-  if (slide !== 1) o.frequency.exponentialRampToValueAtTime(Math.max(30, f * slide), t + d);
+// 잡음 한 번: type 필터 종류, f 중심 주파수, f2 끝 주파수, q, v 음량
+function nz(t, d, o = {}) {
+  const ac = AU.ac; if (!ac) return;
+  const s = ac.createBufferSource(); s.buffer = AU.noise;
+  const bf = ac.createBiquadFilter(); bf.type = o.type || 'bandpass'; bf.frequency.setValueAtTime(o.f || 3000, t); bf.Q.value = o.q || 1;
+  if (o.f2) bf.frequency.exponentialRampToValueAtTime(o.f2, t + d);
+  const g = ac.createGain(); const v = o.v != null ? o.v : .2;
   g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
-  o.connect(g); g.connect(dest || AU.master); o.start(t); o.stop(t + d + .02);
+  s.connect(bf); bf.connect(g); g.connect(o.dest || AU.fx);
+  s.start(t, Math.random() * 1.5); s.stop(t + d + .02);
 }
-let noiseBuf = null;
-function noise(d, v = .2, freq = 3000, delay = 0, q = 1) {
-  const a = AU.ac; if (!a || !G.sound) return;
-  if (!noiseBuf) {
-    noiseBuf = a.createBuffer(1, a.sampleRate * .5, a.sampleRate);
-    const ch = noiseBuf.getChannelData(0);
-    for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
-  }
-  const t = a.currentTime + delay;
-  const s = a.createBufferSource(); s.buffer = noiseBuf;
-  const bf = a.createBiquadFilter(); bf.type = 'bandpass'; bf.frequency.value = freq; bf.Q.value = q;
-  const g = a.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
-  s.connect(bf); bf.connect(g); g.connect(AU.master); s.start(t); s.stop(t + d + .02);
+function drum(c, t) {
+  const D = AU.xf;
+  if (c === 'k') note(150, t, .12, { w: 'sin', v: .5, slide: .3, sus: .2, r: .05, dest: D });
+  else if (c === 's') { nz(t, .12, { f: 1900, q: .7, v: .22, dest: D }); note(190, t, .05, { w: 'tri', v: .12, slide: .6, dest: D }); }
+  else if (c === 'h') nz(t, .03, { type: 'highpass', f: 7500, v: .09, dest: D });
+  else if (c === 'o') nz(t, .14, { type: 'highpass', f: 6500, v: .07, dest: D });
 }
-const arp = (fs, gap, d = .1, v = .06, type = 'square') => fs.forEach((f, i) => tone(f, d, type, v, 1, i * gap));
-const sfx = {
-  click: () => tone(660, .05, 'square', .04),
-  pop: () => tone(520, .08, 'square', .07, 1.8),
-  unpop: () => tone(600, .08, 'square', .06, .5),
-  crunch: () => { noise(.09, .4, 2800, 0, .8); noise(.07, .3, 5200, .05, 1.2); noise(.06, .22, 3600, .11, 1); },
-  coin: () => { tone(988, .06, 'square', .06); tone(1319, .14, 'square', .06, 1, .06); },
-  bubble: () => tone(rnd(280, 480), .06, 'sine', .05, 2),
-  dip: () => { noise(.45, .16, 900, 0, .7); tone(200, .25, 'sine', .08, 2.5); },
-  perfect: () => arp([784, 988, 1175, 1568], .07, .12),
-  good: () => arp([659, 784, 988], .07),
-  bad: () => arp([392, 330, 262], .1, .14, .1, 'triangle'),
-  spicy: () => { tone(900, .3, 'sawtooth', .05, .4); noise(.3, .15, 1500, .05); },
-  whoosh: () => noise(.7, .22, 700, 0, .5),
-  claw: () => tone(180, .12, 'square', .05, 1.3),
-  win: () => arp([523, 659, 784, 1047, 784, 1047], .08, .12, .07),
-  meow: () => { tone(700, .25, 'triangle', .08, 1.4); tone(980, .2, 'triangle', .05, .7, .12); },
-  step: () => noise(.03, .05, 400),
-  buy: () => arp([880, 1175, 1568], .06),
-  deny: () => tone(160, .15, 'square', .06),
-  beep: () => tone(880, .12, 'square', .06),
-  go: () => tone(1320, .3, 'square', .06),
-};
-// 배경 음악: 32스텝 루프
-const MEL = [76, 79, 84, 79, 81, 79, 76, 0, 77, 81, 86, 81, 79, 0, 76, 0, 76, 79, 84, 79, 81, 84, 88, 86, 84, 81, 79, 76, 74, 0, 72, 0];
-const BAS = [48, 0, 55, 0, 53, 0, 48, 0, 50, 0, 57, 0, 55, 0, 55, 0, 48, 0, 55, 0, 53, 0, 57, 0, 53, 0, 55, 0, 55, 0, 48, 0];
+
+// --- 악보 도구: 'E5 G5 - . C6+E6' (- 늘임, . 쉼, + 화음, 숫자는 MIDI 번호)
+const NOTE = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+function midi(s) {
+  if (/^\d+$/.test(s)) return +s;
+  const m = /^([A-G])([#b]?)(-?\d)$/.exec(s);
+  return m ? 12 * (+m[3] + 1) + NOTE[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0) : null;
+}
 const mf = n => 440 * Math.pow(2, (n - 69) / 12);
+function seq(str, div = 2) {
+  const at = {}; let step = 0, last = null;
+  for (const tok of str.split(/\s+/)) {
+    if (!tok || tok === '|') continue;
+    if (tok === '-') { if (last) for (const e of last) e.l += div; }
+    else if (tok === '.') last = null;
+    else {
+      last = tok.split('+').map(midi).filter(n => n != null).map(n => ({ n, l: div }));
+      (at[step] = at[step] || []).push(...last);
+    }
+    step += div;
+  }
+  return { at, len: step };
+}
+function chordTones(name, oct) {
+  const m = /^([A-G][#b]?)(m?)(7?)$/.exec(name);
+  const r = midi(m[1] + oct);
+  return [r, r + (m[2] ? 3 : 4), r + 7, m[3] ? r + 10 : r + 12];
+}
+// 화음 반주: pat 은 한 마디의 토큰 (숫자 = 화음 구성음 번호, * = 화음 전체, . = 쉼)
+function comp(chords, pat, oct) {
+  return chords.map(c => { const t = chordTones(c, oct); return pat.map(p => p === '.' ? '.' : p === '*' ? t.slice(0, 3).join('+') : String(t[p])).join(' '); }).join(' ');
+}
+const ch = (str, div, o, gate) => Object.assign(seq(str, div), { o, gate });
+const TRACKS = {
+  // 룰루랜드 거리·타이틀: 밝은 C장조 행진
+  park: {
+    bpm: 132,
+    ch: [
+      ch('E5 G5 C6 G5 E5 G5 A5 G5 | A5 - C6 A5 E5 - . . | F5 A5 C6 A5 G5 F5 E5 F5 | G5 - D5 - G5 A5 B5 - | C6 - B5 C6 D6 C6 A5 G5 | A5 C6 E6 - D6 C6 A5 - | F5 A5 G5 F5 E5 - D5 E5 | D5 - G5 - C5 - . .', 2, { w: 'p25', v: .07 }, .8),
+      ch('C3 . G2 . C3 . G2 . | A2 . E2 . A2 . E2 . | F2 . C3 . F2 . C3 . | G2 . D3 . G2 . B2 . | C3 . G2 . C3 . E3 . | A2 . E2 . A2 . C3 . | F2 . C3 . D3 . A2 . | G2 . G2 . C3 . . .', 2, { w: 'tri', v: .2 }, .7),
+      ch(comp(['C', 'Am', 'F', 'G', 'C', 'Am', 'F', 'G'], [0, 2, 1, 2, 0, 2, 1, 2], 4), 2, { w: 'p12', v: .025 }, .5),
+    ],
+    dr: 'k...h...s...h.h.k...h.k.s...h...',
+  },
+  // 탕후루 가게: 느긋한 F장조 (재료 꽂기·먹방)
+  shop: {
+    bpm: 104,
+    ch: [
+      ch('A5 - C6 - A5 G5 F5 - | D5 F5 A5 - G5 - F5 . | D5 - F5 Bb5 A5 - G5 - | E5 G5 C6 - Bb5 A5 G5 . | A5 - C6 - F6 - E6 D6 | C6 - A5 - D6 C6 A5 . | Bb5 A5 G5 - D5 E5 F5 G5 | A5 - G5 - F5 - . .', 2, { w: 'tri', v: .16, vib: .004 }, .9),
+      ch('F2 - A2 - C3 - A2 - | D2 - F2 - A2 - F2 - | Bb1 - D2 - F2 - D2 - | C2 - E2 - G2 - Bb2 - | F2 - A2 - C3 - A2 - | D2 - F2 - A2 - D3 - | G2 - Bb2 - D3 - Bb2 - | C2 - G2 - C2 - . -', 2, { w: 'tri', v: .17 }, .8),
+      ch(comp(['F', 'Dm', 'Bb', 'C7', 'F', 'Dm', 'Gm', 'C7'], ['.', '*', '.', '*'], 4), 4, { w: 'p25', v: .025, lp: 1800 }, .35),
+    ],
+    dr: 'k.......s.......k...h.k.s...h...',
+  },
+  // 설탕 시럽 끓이기: 긴장감 있는 A단조
+  cook: {
+    bpm: 148,
+    ch: [
+      ch('A4 . C5 . E5 . C5 . | A4 . C5 . F5 . E5 . | G4 . B4 . D5 . B4 . | G#4 . B4 . E5 . D5 .', 2, { w: 'p12', v: .06 }, .5),
+      ch('A2 A2 A2 A2 A2 A2 A2 A2 | F2 F2 F2 F2 F2 F2 F2 F2 | G2 G2 G2 G2 G2 G2 G2 G2 | E2 E2 E2 E2 E2 E2 E2 E2', 2, { w: 'sq', v: .07, lp: 700 }, .45),
+    ],
+    dr: 'k.hhs.hhk.hhs.hh',
+  },
+  // 아이스크림 뽑기: 오락실 D장조
+  arcade: {
+    bpm: 152,
+    ch: [
+      ch('D5 F#5 A5 D6 A5 F#5 D5 F#5 | G5 B5 D6 G6 D6 B5 G5 B5 | A5 C#6 E6 A6 E6 C#6 A5 C#6 | D6 - A5 - F#5 - D5 . | F#5 A5 D6 F#6 D6 A5 F#5 A5 | E5 G5 B5 E6 B5 G5 E5 G5 | A5 C#6 E6 G6 E6 C#6 A5 G5 | F#5 - E5 - D5 - . .', 2, { w: 'p25', v: .055 }, .7),
+      ch('D3 . D3 . A2 . A2 . | G2 . G2 . D3 . D3 . | A2 . A2 . E3 . E3 . | D3 . A2 . D3 . . . | D3 . D3 . A2 . A2 . | E2 . E2 . B2 . B2 . | A2 . A2 . C#3 . C#3 . | D3 . A2 . D3 . . .', 2, { w: 'tri', v: .2 }, .6),
+    ],
+    dr: 'k...s...k.k.s...',
+  },
+  // 드롭타워 낙하: 빠른 E단조
+  fall: {
+    bpm: 172,
+    ch: [
+      ch('E5 - G5 - B5 - A5 G5 | F#5 - A5 - D6 - C6 B5 | C6 - B5 - A5 - G5 A5 | B5 - - - D#5 - F#5 . | E5 - G5 - B5 - E6 D6 | C6 - B5 - A5 - G5 - | A5 - G5 - F#5 - E5 F#5 | G5 - F#5 - E5 - . .', 2, { w: 'sq', v: .045, lp: 3500 }, .85),
+      ch('E2 E3 E2 E3 E2 E3 E2 E3 | D2 D3 D2 D3 D2 D3 D2 D3 | C2 C3 C2 C3 C2 C3 C2 C3 | B1 B2 B1 B2 B1 B2 B1 B2 | E2 E3 E2 E3 E2 E3 E2 E3 | C2 C3 C2 C3 C2 C3 C2 C3 | A1 A2 A1 A2 A1 A2 A1 A2 | B1 B2 B1 B2 B1 B2 B1 B2', 2, { w: 'sq', v: .065, lp: 900 }, .5),
+    ],
+    dr: 'k.hks.h.k.hks.hh',
+  },
+  // 룰루 옷장: 오르골 느낌의 G장조 왈츠 (3/4)
+  boutique: {
+    bpm: 100,
+    ch: [
+      ch('B5 - D6 | G5 - - | A5 B5 C6 | B5 - A5 | G5 - B5 | E5 - - | F#5 G5 A5 | D5 - - | B5 - D6 | G6 - - | F#6 E6 D6 | C6 - A5 | B5 - G5 | A5 - F#5 | G5 - - | . . .', 4, { w: 'tri', v: .2, r: .3, sus: .3 }, .9),
+      ch('B6 - D7 | G6 - - | A6 B6 C7 | B6 - A6 | G6 - B6 | E6 - - | F#6 G6 A6 | D6 - - | B6 - D7 | G7 - - | F#7 E7 D7 | C7 - A6 | B6 - G6 | A6 - F#6 | G6 - - | . . .', 4, { w: 'sin', v: .045, r: .4, sus: .2 }, .6),
+      ch(comp(['G', 'Em', 'Am', 'D', 'G', 'C', 'D', 'D', 'G', 'Em', 'D', 'Am', 'G', 'D', 'G', 'G'], [0, '.', '.'], 2), 4, { w: 'tri', v: .17 }, .6),
+      ch(comp(['G', 'Em', 'Am', 'D', 'G', 'C', 'D', 'D', 'G', 'Em', 'D', 'Am', 'G', 'D', 'G', 'G'], ['.', '*', '*'], 4), 4, { w: 'p12', v: .02, lp: 2000 }, .3),
+    ],
+  },
+};
+function setTrack(name) {
+  AU.want = name;
+  if (!AU.ac || AU.switching || name === AU.track) return;
+  AU.switching = true;
+  const t = AU.ac.currentTime, x = AU.xf.gain;
+  x.cancelScheduledValues(t); x.setValueAtTime(x.value, t); x.linearRampToValueAtTime(0, t + .35);
+  setTimeout(() => {
+    AU.track = AU.want; AU.step = 0; AU.next = AU.ac.currentTime + .06;
+    const t2 = AU.ac.currentTime;
+    x.cancelScheduledValues(t2); x.setValueAtTime(0, t2);
+    if (AU.track) x.linearRampToValueAtTime(1, t2 + .5);
+    AU.switching = false;
+    if (AU.want !== AU.track) setTrack(AU.want);
+  }, AU.track ? 380 : 10);
+}
 function schedMusic() {
-  const a = AU.ac; if (!a) return;
-  const spb = 60 / 140 / 2;
-  if (AU.next < a.currentTime - .2) AU.next = a.currentTime + .05;
-  while (AU.next < a.currentTime + .25) {
-    const i = AU.step % 32, dl = Math.max(0, AU.next - a.currentTime);
-    if (MEL[i]) tone(mf(MEL[i]), spb * .9, 'square', .03, 1, dl, AU.music);
-    if (BAS[i]) tone(mf(BAS[i]), spb * 1.8, 'triangle', .08, 1, dl, AU.music);
-    AU.next += spb; AU.step++;
+  const ac = AU.ac, tr = TRACKS[AU.track];
+  if (!ac || !tr) return;
+  const sd = 60 / tr.bpm / 4;
+  if (AU.next < ac.currentTime - .1) AU.next = ac.currentTime + .05;
+  while (AU.next < ac.currentTime + .22) {
+    const s = AU.step, t = AU.next;
+    if (G.music) {
+      for (const c of tr.ch) {
+        const ev = c.at[s % c.len];
+        if (ev) for (const e of ev) note(mf(e.n), t, e.l * sd * (c.gate || .85), Object.assign({ dest: AU.xf }, c.o));
+      }
+      if (tr.dr) { const d = tr.dr[s % tr.dr.length]; if (d !== '.') drum(d, t); }
+    }
+    AU.next += sd; AU.step++;
   }
 }
+// 짧은 징글: 울리는 동안 배경음악을 낮춘다
+const JINGLES = {
+  start: { bpm: 160, lead: 'C5 E5 G5 C6 - - - .', bass: 'C3 - - - - - - .' },
+  fanfare: { bpm: 150, lead: 'G5 . G5 G5 C6 - - E6 | D6 C6 D6 - E6 - - -', bass: 'C3 - - - G2 - - - | G2 - - - C3 - - -' },
+  nice: { bpm: 160, lead: 'E5 G5 C6 - E6 - - .', bass: 'C3 - - - C3 - - .' },
+  meh: { bpm: 120, lead: 'E5 D5 C5 - - .', bass: 'A2 - - - - .', w: 'tri', vib: .02 },
+  prize: { bpm: 180, lead: 'C6 E6 G6 C7 - - . .', bass: 'C3 - G3 - C4 - . .' },
+  big: { bpm: 170, lead: 'C6 E6 G6 C7 - G6 C7 - E7 - - -', bass: 'C3 - - - G3 - - - C4 - - -' },
+  unlock: { bpm: 180, lead: 'G5 C6 E6 G6 - C7 - - .', w: 'p12' },
+  coatPerfect: { bpm: 200, lead: 'C6 E6 G6 C7 E7 - - .', w: 'p12' },
+  coatGood: { bpm: 180, lead: 'E6 G6 C7 - - .', w: 'p12' },
+  coatBad: { bpm: 110, lead: 'G4 F#4 F4 - - -', w: 'tri', vib: .03 },
+  aww: { bpm: 110, lead: 'A4 G#4 G4 - - -', w: 'tri', vib: .03 },
+};
+function jingle(name, delay = 0) {
+  if (!AU.ac || !G.sfx) return;
+  const j = JINGLES[name], sd = 60 / j.bpm / 2, t0 = AU.ac.currentTime + .02 + delay;
+  const L = seq(j.lead, 1);
+  for (const s in L.at) for (const e of L.at[s]) note(mf(e.n), t0 + s * sd, e.l * sd * .9, { w: j.w || 'p25', v: j.w === 'p12' ? .14 : .09, vib: j.vib });
+  if (j.bass) { const B = seq(j.bass, 1); for (const s in B.at) for (const e of B.at[s]) note(mf(e.n), t0 + s * sd, e.l * sd * .9, { w: 'tri', v: .16 }); }
+  if (AU.duck) {
+    const g = AU.duck.gain, t = AU.ac.currentTime + delay;
+    g.setTargetAtTime(.18, t, .03); g.setTargetAtTime(1, t + L.len * sd + .15, .25);
+  }
+}
+// 이어지는 소리 (끓는 시럽, 집게 모터, 바람, 분수)
+const LOOPS = {};
+function makeLoop(kind) {
+  const ac = AU.ac;
+  const g = ac.createGain(); g.gain.value = 0; g.connect(AU.fx);
+  const f = ac.createBiquadFilter();
+  const stops = [];
+  let src;
+  if (kind === 'motor') {
+    src = ac.createOscillator(); src.type = 'sawtooth'; src.frequency.value = 70;
+    f.type = 'lowpass'; f.frequency.value = 520;
+    const l = ac.createOscillator(), lg = ac.createGain(); l.frequency.value = 11; lg.gain.value = 5;
+    l.connect(lg); lg.connect(src.frequency); l.start(); stops.push(l);
+    src.connect(f);
+  } else {
+    src = ac.createBufferSource(); src.buffer = AU.noise; src.loop = true;
+    f.type = kind === 'wind' ? 'lowpass' : 'bandpass';
+    f.frequency.value = kind === 'wind' ? 600 : kind === 'water' ? 2600 : 700;
+    f.Q.value = kind === 'boil' ? 1.2 : .7;
+    src.connect(f);
+  }
+  if (kind === 'boil' || kind === 'water') {
+    // 보글보글: 불규칙한 떨림으로 음량을 흔든다
+    const am = ac.createGain(); am.gain.value = .55;
+    for (const [hz, dep] of [[kind === 'boil' ? 7.3 : 4.1, .3], [kind === 'boil' ? 3.1 : 2.3, .2]]) {
+      const l = ac.createOscillator(), lg = ac.createGain(); l.frequency.value = hz; lg.gain.value = dep;
+      l.connect(lg); lg.connect(am.gain); l.start(); stops.push(l);
+    }
+    f.connect(am); am.connect(g);
+  } else f.connect(g);
+  src.start(); stops.push(src);
+  return {
+    set(vol, freq, pitch) {
+      const t = ac.currentTime;
+      if (vol != null) g.gain.setTargetAtTime(vol, t, .08);
+      if (freq != null) f.frequency.setTargetAtTime(freq, t, .08);
+      if (pitch != null && src.frequency) src.frequency.setTargetAtTime(pitch, t, .06);
+    },
+    stop() {
+      g.gain.setTargetAtTime(0, ac.currentTime, .05);
+      setTimeout(() => { for (const s of stops) { try { s.stop(); } catch (e) { /* 이미 멈춤 */ } } g.disconnect(); }, 400);
+    },
+  };
+}
+function loop(name, kind = name) {
+  if (!AU.ac || !G.sfx) return null;
+  return LOOPS[name] || (LOOPS[name] = makeLoop(kind));
+}
+function loopOff(name) { if (LOOPS[name]) { LOOPS[name].stop(); delete LOOPS[name]; } }
+function loopsOff() { for (const k in LOOPS) loopOff(k); }
+
+// 효과음: FX(fn) 은 오디오가 켜져 있을 때만 현재 시각 t 를 넘겨 실행한다
+const FX = fn => (...a) => { if (AU.ac && G.sfx) fn(AU.ac.currentTime, ...a); };
+const JUICY = ['berry', 'grape', 'mandarin', 'blue', 'kiwi'];
+let stepAlt = false;
+const sfx = {
+  click: FX(t => note(1320, t, .025, { w: 'p25', v: .04, r: .02 })),
+  swish: FX(t => nz(t, .22, { f: 700, f2: 3200, q: .8, v: .22 })),
+  door: FX(t => { note(1568, t, .35, { w: 'tri', v: .09, sus: .3, r: .3 }); note(2093, t + .12, .45, { w: 'tri', v: .09, sus: .3, r: .4 }); }),
+  step: FX(t => { stepAlt = !stepAlt; nz(t, .05, { type: 'lowpass', f: stepAlt ? 420 : 520, v: .22 }); }),
+  bird: FX(t => { const b = rnd(2400, 3000); for (let i = 0; i < ri(2, 3); i++) note(b, t + i * .09, .05, { w: 'sin', v: .03, slide: 1.35 }); }),
+  notify: FX(t => { note(1319, t, .05, { w: 'sin', v: .07 }); note(1760, t + .07, .09, { w: 'sin', v: .07 }); }),
+  // 탕후루 가게
+  skewer: FX((t, id) => {
+    const soft = id === 'marsh', chewy = id === 'gummy';
+    nz(t, .04, { type: 'highpass', f: soft ? 1500 : 3000, v: .12 });
+    note(soft ? 260 : chewy ? 330 : 420, t, .09, { w: 'sin', v: .16, slide: soft ? 1.3 : 1.9, vib: chewy ? .08 : 0, vibRate: 18 });
+  }),
+  unpop: FX(t => note(640, t, .09, { w: 'sin', v: .12, slide: .45 })),
+  ding: FX(t => { note(1568, t + .04, .12, { w: 'tri', v: .08, sus: .4, r: .15 }); note(2093, t + .1, .16, { w: 'tri', v: .07, sus: .3, r: .2 }); }),
+  bloop: FX(t => note(300, t + .03, .1, { w: 'tri', v: .08, slide: .7 })),
+  bubble: FX(t => note(rnd(260, 480), t, .06, { w: 'sin', v: .06, slide: 2.2 })),
+  therm: FX((t, T) => note(600 + (T - 128) * 14, t, .04, { w: 'p25', v: .055 })),
+  zone: FX(t => { note(1760, t, .045, { w: 'p12', v: .08 }); note(2349, t + .05, .06, { w: 'p12', v: .08 }); }),
+  dip: FX(t => {
+    nz(t, .4, { type: 'lowpass', f: 2600, f2: 300, v: .35 });
+    note(160, t, .22, { w: 'sin', v: .15, slide: 2.4 });
+    nz(t + .06, 1.1, { type: 'highpass', f: 4200, v: .12 });
+  }),
+  crackle: FX(t => { for (let i = 0; i < 9; i++) nz(t + rnd(0, .45), .012, { type: 'highpass', f: rnd(5000, 9000), v: rnd(.05, .14) }); }),
+  bite: FX((t, id) => {
+    nz(t, .03, { type: 'highpass', f: 6000, v: .3 });
+    nz(t + .004, .05, { f: 3600, q: 1.5, v: .28 });
+    if (id === 'marsh') { nz(t + .02, .2, { type: 'lowpass', f: 900, v: .3 }); note(190, t + .02, .12, { w: 'sin', v: .14, slide: .6 }); }
+    else if (id === 'gummy') note(230, t + .03, .28, { w: 'sin', v: .16, vib: .09, vibRate: 14, slide: 1.4 });
+    else {
+      for (let i = 0; i < 4; i++) nz(t + .02 + i * .035, .045, { f: rnd(1700, 3300), q: 1.2, v: .26 * (1 - i * .15) });
+      note(110, t, .08, { w: 'sin', v: .22, slide: .5 });
+      if (JUICY.includes(id)) nz(t + .08, .1, { type: 'lowpass', f: 1200, v: .12 });
+    }
+    for (let i = 0; i < 3; i++) { nz(t + .3 + i * .16, .06, { type: 'lowpass', f: 700, v: .1 }); nz(t + .3 + i * .16, .03, { f: 2400, v: .04 }); }
+  }),
+  spicy: FX(t => { note(700, t, .5, { w: 'sin', v: .08, slide: 2.6 }); nz(t + .1, .7, { type: 'highpass', f: 3500, v: .12 }); note(900, t + .05, .3, { w: 'saw', v: .03, slide: .5, lp: 2000 }); }),
+  coin: FX(t => { note(988, t, .05, { w: 'p25', v: .06 }); note(1319, t + .06, .14, { w: 'p25', v: .06 }); }),
+  coinRoll: FX((t, n = 6) => { for (let i = 0; i < n; i++) note(1319 + i * 40, t + .25 + i * .06, .04, { w: 'p25', v: .045 }); }),
+  meow: FX(t => { note(700, t, .25, { w: 'tri', v: .08, slide: 1.4 }); note(980, t + .12, .2, { w: 'tri', v: .05, slide: .7 }); }),
+  // 뽑기
+  insert: FX(t => { note(988, t, .05, { w: 'p25', v: .06 }); note(1319, t + .06, .1, { w: 'p25', v: .06 }); nz(t + .2, .08, { type: 'lowpass', f: 600, v: .25 }); note(140, t + .2, .06, { w: 'sq', v: .05, lp: 500 }); }),
+  claw: FX(t => note(180, t, .12, { w: 'sq', v: .05, slide: 1.3, lp: 1200 })),
+  clunk: FX(t => { nz(t, .06, { type: 'lowpass', f: 900, v: .3 }); note(160, t, .05, { w: 'sq', v: .06, lp: 700 }); note(520, t + .03, .03, { w: 'sq', v: .03 }); }),
+  latch: FX(t => note(880, t, .06, { w: 'p12', v: .06, slide: 1.5 })),
+  slip: FX(t => note(1200, t, .45, { w: 'sin', v: .08, slide: .3 })),
+  thud: FX(t => { note(90, t, .18, { w: 'sin', v: .35, slide: .5 }); nz(t, .08, { type: 'lowpass', f: 500, v: .2 }); }),
+  thunk: FX(t => { nz(t, .1, { type: 'lowpass', f: 800, v: .3 }); note(120, t, .12, { w: 'sin', v: .3, slide: .6 }); }),
+  // 드롭타워
+  beep: FX(t => note(880, t, .12, { w: 'p25', v: .06 })),
+  go: FX(t => note(1760, t, .35, { w: 'p25', v: .06 })),
+  clack: FX(t => { nz(t, .03, { f: 1300, q: 4, v: .45 }); note(300, t, .03, { w: 'sq', v: .05 }); }),
+  whoosh: FX(t => nz(t, .8, { f: 400, f2: 2500, q: .6, v: .3 })),
+  sparkle: FX(t => [2093, 2637, 3136, 4186].forEach((f, i) => note(f, t + i * .04, .08, { w: 'p12', v: .05 }))),
+  combo: FX((t, n) => note(880 * Math.pow(2, Math.min(n, 12) / 12), t + .05, .08, { w: 'p12', v: .06 })),
+  squawk: FX(t => { note(1400, t, .07, { w: 'sq', v: .05, slide: 1.5 }); note(1150, t + .09, .1, { w: 'sq', v: .05, slide: .7 }); }),
+  brake: FX(t => nz(t, .9, { type: 'highpass', f: 3200, f2: 1400, v: .18 })),
+  // 옷장
+  bell: FX((t, i = 0) => note(mf(79 + [0, 2, 4, 7, 9, 12][i % 6]), t, .3, { w: 'tri', v: .08, sus: .2, r: .3 })),
+  rustle: FX(t => { nz(t, .12, { f: 2600, q: .6, v: .1 }); nz(t + .1, .14, { f: 3000, q: .6, v: .08 }); }),
+  chaching: FX(t => { nz(t, .08, { f: 3000, v: .25 }); note(2093, t + .05, .3, { w: 'tri', v: .1, sus: .3 }); note(2637, t + .11, .4, { w: 'tri', v: .1, sus: .3, r: .3 }); }),
+  deny: FX(t => note(110, t, .2, { w: 'saw', v: .07, lp: 900 })),
+};
 
 // ---------- 스프라이트 도구
 function mk(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
@@ -264,6 +534,8 @@ const ICON = {
   heart: spr(['.OO.OO.', 'OPPOPPO', 'OPWPPPO', 'OPPPPPO', '.OPPPO.', '..OPO..', '...O...'], { P: '#ff6f9c' }),
   spkOn: spr(['...O....', '..OW..O.', 'OOWW.O.O', 'OWWW.O.O', 'OOWW.O.O', '..OW..O.', '...O....'], { O: '#ffd0e0', W: '#ffd0e0' }),
   spkOff: spr(['...O....', '..OW....', 'OOWW.O.O', 'OWWW..O.', 'OOWW.O.O', '..OW....', '...O....'], { O: '#9c8aa0', W: '#9c8aa0' }),
+  noteOn: spr(['...OOO', '...OWO', '...O..', '...O..', '.OOO..', 'OWWO..', '.OO...'], { O: '#ffd0e0', W: '#ffd0e0' }),
+  noteOff: spr(['...OOO', '...OWO', 'O..O.O', '.O.O..', '.OOO..', 'OWWOO.', '.OO..O'], { O: '#9c8aa0', W: '#9c8aa0' }),
   lock: spr(['..OOO..', '.O...O.', '.O...O.', 'OOOOOOO', 'OYYYYYO', 'OYYOYYO', 'OYYYYYO', 'OOOOOOO'], { Y: C.gold }),
   check: spr(['......V', '.....VV', 'V...VV.', 'VV.VV..', '.VVV...', '..V....'], { V: '#2e9e5a' }),
   cross: spr(['V...V', '.V.V.', '..V..', '.V.V.', 'V...V'], { V: '#d23a55' }),
@@ -601,7 +873,8 @@ addEventListener('keydown', e => {
   audio();
   const was = keys[k]; keys[k] = true;
   if (was || e.repeat || fadeDir) return;
-  if (k === 'm') { setSound(!G.sound); toast(G.sound ? '소리를 켰어요' : '소리를 껐어요'); return; }
+  if (k === 'm') { setMusic(!G.music); toast(G.music ? '배경음악을 켰어요' : '배경음악을 껐어요'); return; }
+  if (k === 'n') { setSfx(!G.sfx); toast(G.sfx ? '효과음을 켰어요' : '효과음을 껐어요'); sfx.click(); return; }
   const b = ui.btns.find(b => b.key === k);
   if (b) { press(b); return; }
   if (scene.key) scene.key(k);
@@ -729,11 +1002,16 @@ function world(cam) {
 // ---------- 장면 전환
 const SC = {};
 let scene = null, nextScene = null, fade = 0, fadeDir = 0;
-function go(name, arg) { if (fadeDir) return; nextScene = { name, arg }; fadeDir = 1; }
+function go(name, arg) {
+  if (fadeDir) return;
+  nextScene = { name, arg }; fadeDir = 1;
+  if (scene === SC.park && name !== 'park') sfx.door(); else sfx.swish();
+}
 
 // ================= 타이틀 =================
 SC.title = {
   t: 0, confirm: 0,
+  music() { return 'park'; },
   enter() { this.t = 0; this.confirm = 0; },
   update(dt) { this.t += dt; if (this.confirm > 0) this.confirm -= dt; },
   draw() {
@@ -747,7 +1025,9 @@ SC.title = {
     }
     const blink = (this.t % 3.4) < .12;
     blit(lulu(G.eq, 'idle', Math.floor(this.t * 2) % 2, blink ? 'blink/smile' : 'happy/open'), W / 2 - 20, 84, 2);
-    button('start', 116, 149, 88, 18, hasSave ? '이어하기' : '시작하기', () => { go('park'); if (!hasSave) { hasSave = true; save(); } }, { key: 'Enter', f: F.l });
+    button('start', 116, 149, 88, 18, hasSave ? '이어하기' : '시작하기', () => { jingle('start'); go('park'); if (!hasSave) { hasSave = true; save(); } }, { key: 'Enter', f: F.l });
+    soundToggles(W - 40, 4);
+    if (!AU.ac) text('화면을 누르면 소리가 나요', W - 44, 6, { f: F.s, c: '#ffffff', o: C.ink, a: 'right' });
     if (hasSave) button('reset', 4, 167, 70, 12, this.confirm > 0 ? '정말 지울까요?' : '기록 지우기', () => {
       if (this.confirm > 0) { G = DEF(); save(); hasSave = false; this.confirm = 0; toast('기록을 지웠어요'); }
       else this.confirm = 3;
@@ -880,7 +1160,8 @@ function drawNPC(n, sx) {
   rect(sx + 2, y + 12, 2, lh, n.pal.p); rect(sx + 4, y + 12, 2, rh, n.pal.p);
 }
 SC.park = {
-  x: 133, tx: null, want: null, cam: 0, walkT: 0, moving: false, npcs: [],
+  x: 133, tx: null, want: null, cam: 0, walkT: 0, moving: false, npcs: [], birdT: 2,
+  music() { return 'park'; },
   enter(from) {
     const b = BOOTHS.find(b => b.scene === from);
     if (b) this.x = b.door;
@@ -906,6 +1187,10 @@ SC.park = {
     } else this.walkT = 0;
     this.moving = !!dir;
     this.cam = clamp(Math.round(this.x - W / 2), 0, WORLD - W);
+    this.birdT -= dt;
+    if (this.birdT <= 0) { this.birdT = rnd(3, 8); sfx.bird(); }
+    const wl = loop('water');
+    if (wl) wl.set(Math.max(0, 1 - Math.abs(this.x - 830) / 220) * .12);
     for (const n of this.npcs) {
       n.t += dt;
       if (n.pause > 0) { n.pause -= dt; continue; }
@@ -979,7 +1264,7 @@ function newOrder() {
   for (let i = 0; i < n; i++) o.push(pick(u).id);
   if (G.fans >= 300 && Math.random() < .35) o[ri(0, n - 1)] = 'chili';
   K.order = o; K.nick = pick(NICKS);
-  chat('order', K.nick);
+  chat('order', K.nick); sfx.notify();
 }
 function drawChat(x, y, w, h) {
   panel(x, y, w, h, 'rgba(43,24,56,0.82)');
@@ -1037,13 +1322,13 @@ function addPiece(i) {
   if (G.fans < ing.need) { sfx.deny(); toast('구독자 ' + ing.need + '명부터 쓸 수 있어요'); return; }
   if (K.sk.length >= 5) { sfx.deny(); toast('꼬치에는 5개까지 꽂을 수 있어요'); return; }
   const idx = K.sk.length;
-  K.sk.push(ing.id); sfx.pop();
+  K.sk.push(ing.id); sfx.skewer(ing.id);
   burst(124 + idx * 24, 80, ing.bits, 6, 40, 120, .4);
-  if (K.order[idx] === ing.id) { K.face = 'happy/open'; K.faceT = .5; }
-  else if (idx < K.order.length) { K.face = 'wow/o'; K.faceT = .5; }
+  if (K.order[idx] === ing.id) { K.face = 'happy/open'; K.faceT = .5; sfx.ding(); }
+  else if (idx < K.order.length) { K.face = 'wow/o'; K.faceT = .5; sfx.bloop(); }
 }
 function goSyrup() {
-  K.phase = 'syrup'; K.temp = 108; K.t = 0; K.q = null; K.coated = false; K.revealed = false;
+  K.phase = 'syrup'; K.temp = 108; K.t = 0; K.q = null; K.coated = false; K.revealed = false; K.beepT = 0;
   chat('설탕 코팅 들어갑니다~', '룰루', C.mint);
 }
 function dipNow() {
@@ -1052,6 +1337,7 @@ function dipNow() {
 }
 function startEat() {
   K.phase = 'eat'; K.eatI = 0; K.t = 0; K.bit = false; K.spicy = 0; K.fast = false; K.eatenChili = false;
+  loopOff('boil');
   chat('먹방 시작할게요!', '룰루', C.mint);
 }
 function finishEat() {
@@ -1069,10 +1355,14 @@ function finishEat() {
   save();
   K.res = { matched, n, full, coins, fans, unlocked };
   K.phase = 'result'; K.t = 0;
-  sfx.coin(); for (let i = 0; i < 6; i++) heart(rnd(200, 260), rnd(60, 90));
+  jingle(full && K.q === 'perfect' ? 'fanfare' : matched > 0 && K.q !== 'burnt' ? 'nice' : 'meh');
+  sfx.coinRoll(Math.min(10, Math.ceil(coins / 8)));
+  if (unlocked.length) jingle('unlock', 1.4);
+  for (let i = 0; i < 6; i++) heart(rnd(200, 260), rnd(60, 90));
   if (full) chat('주문 그대로다!! 최고', K.nick);
 }
 SC.kitchen = {
+  music() { return K.phase === 'syrup' || K.phase === 'dip' ? 'cook' : 'shop'; },
   enter() {
     K.phase = 'build'; K.sk = []; K.q = null; K.coated = false; K.res = null; K.faceT = 0;
     if (!K.chat.length) chat('룰루 방송 켜졌다!!');
@@ -1086,14 +1376,22 @@ SC.kitchen = {
     if (K.phase === 'syrup') {
       const r = 11 + Math.min(5, G.fans / 60) + 2.5 * Math.sin(K.t * 2.7);
       K.temp += r * dt;
+      const bl = loop('boil'), hk = clamp((K.temp - 100) / 90, 0, 1);
+      if (bl) bl.set(.04 + .22 * hk, 450 + 1300 * hk);
+      K.beepT -= dt;
+      if (K.temp >= 128 && K.beepT <= 0) {
+        K.beepT = clamp(.55 - (K.temp - 128) * .012, .14, .55);
+        if (K.temp >= 150 && K.temp <= 160) sfx.zone(); else sfx.therm(K.temp);
+      }
       if (Math.random() < dt * (K.temp - 100) / 10) { burst(rnd(140, 210), 118, ['#fff4d6', '#ffffff'], 2, 20, -10, .5); if (Math.random() < .3) sfx.bubble(); }
       if (K.temp >= 188) dipNow();
     } else if (K.phase === 'dip') {
-      if (K.t >= .9 && !K.coated) K.coated = true;
+      const bl = loop('boil'); if (bl) bl.set(K.t < .9 ? .3 : .08, 1600);
+      if (K.t >= .9 && !K.coated) { K.coated = true; sfx.crackle(); }
       if (K.t >= 1.3 && !K.revealed) {
         K.revealed = true;
         const q = K.q;
-        (q === 'perfect' ? sfx.perfect : q === 'good' ? sfx.good : sfx.bad)();
+        jingle(q === 'perfect' ? 'coatPerfect' : q === 'good' ? 'coatGood' : 'coatBad');
         if (q === 'perfect' || q === 'good') burst(175, 60, ['#ffffff', '#fff3b0', C.gold], 18, 90, 40, .9);
         chat(q); chat(q);
         K.face = q === 'perfect' ? 'happy/open' : q === 'good' ? 'happy/smile' : 'x/wave'; K.faceT = 1.2;
@@ -1109,7 +1407,7 @@ SC.kitchen = {
       if (K.t >= .35 && !K.bit) {
         K.bit = true;
         const id = K.sk[K.eatI];
-        sfx.crunch();
+        sfx.bite(id);
         burst(218, 78, ING_BY[id].bits.concat(['#ffffff', '#fff3b0']), 14, 70, 180, .6);
         pop(pick(['와삭!', '바삭!', '아삭!', '와그작!']), 246 + rnd(-6, 6), 60);
         if (Math.random() < .6) chat('eat');
@@ -1303,7 +1601,7 @@ function clawWin(p) {
   G.ice[p.id] = (G.ice[p.id] || 0) + 1;
   G.coins += ice.val;
   CW.msg = ice.name + ' 획득! +' + ice.val + '코인';
-  sfx.win(); burst(98, 140, [C.gold, '#ffffff', C.pink], 20, 80, 120, .8);
+  sfx.thunk(); jingle(ice.val >= 50 ? 'big' : 'prize'); burst(98, 140, [C.gold, '#ffffff', C.pink], 20, 80, 120, .8);
   pop('+' + ice.val, 98, 120, C.gold);
   if (first) toast('새 아이스크림: ' + ice.name);
   if (ICE.every(i => G.ice[i.id]) && !G.own.band.includes('crown')) {
@@ -1313,11 +1611,12 @@ function clawWin(p) {
   save();
 }
 SC.claw = {
+  music() { return 'arcade'; },
   enter() { CW.st = 'idle'; CW.x = 160; CW.y = 50; CW.held = null; CW.msg = ''; fillPrizes(); },
   play() {
     if (CW.st === 'idle') {
       if (G.coins < CLAW_COST) { sfx.deny(); toast('코인이 부족해요. 탕후루를 팔아 모아요'); return; }
-      G.coins -= CLAW_COST; save(); sfx.coin(); CW.st = 'move'; CW.msg = '';
+      G.coins -= CLAW_COST; save(); sfx.insert(); CW.st = 'move'; CW.msg = '';
     } else if (CW.st === 'move') { CW.st = 'drop'; sfx.claw(); }
   },
   update(dt) {
@@ -1325,9 +1624,11 @@ SC.claw = {
     for (const p of CW.prizes) if (p.st === 'fall') {
       p.vy += 320 * dt; p.y += p.vy * dt;
       if (p.x < CHUTE && p.y > FLOOR + 20) { p.st = 'won'; clawWin(p); }
-      else if (p.x >= CHUTE && p.y >= FLOOR) { p.y = FLOOR; p.vy = 0; p.st = 'rest'; sfx.claw(); }
+      else if (p.x >= CHUTE && p.y >= FLOOR) { p.y = FLOOR; p.vy = 0; p.st = 'rest'; sfx.thud(); }
     }
     CW.prizes = CW.prizes.filter(p => p.st !== 'won');
+    const MOTOR = { move: 72, drop: 52, lift: 90, carry: 78, back: 70 };
+    if (MOTOR[CW.st]) { const m = loop('motor'); if (m) m.set(.07, 520, MOTOR[CW.st]); } else loopOff('motor');
     switch (CW.st) {
       case 'move':
         CW.x += CW.dir * 70 * dt;
@@ -1336,7 +1637,7 @@ SC.claw = {
         break;
       case 'drop':
         CW.y += 80 * dt;
-        if (CW.y >= 112) { CW.y = 112; CW.st = 'grab'; CW.t = 0; sfx.claw(); }
+        if (CW.y >= 112) { CW.y = 112; CW.st = 'grab'; CW.t = 0; sfx.clunk(); }
         break;
       case 'grab':
         if (CW.t > .45) {
@@ -1344,7 +1645,7 @@ SC.claw = {
           for (const p of CW.prizes) if (p.st === 'rest') { const d = Math.abs(p.x - CW.x); if (d < bd) { bd = d; best = p; } }
           let ch = bd <= 3 ? .85 : bd <= 6 ? .55 : bd <= 9 ? .25 : 0;
           if (best && best.id === 'gold') ch *= .6;
-          if (best && Math.random() < ch) { CW.held = best; best.st = 'held'; CW.slipAt = bd > 3 ? (Math.random() < .25 ? rnd(.2, .8) : -1) : (Math.random() < .06 ? rnd(.2, .8) : -1); }
+          if (best && Math.random() < ch) { CW.held = best; best.st = 'held'; sfx.latch(); CW.slipAt = bd > 3 ? (Math.random() < .25 ? rnd(.2, .8) : -1) : (Math.random() < .06 ? rnd(.2, .8) : -1); }
           else CW.held = null;
           CW.st = 'lift';
         }
@@ -1352,16 +1653,16 @@ SC.claw = {
       case 'lift':
         CW.y -= 60 * dt;
         if (CW.held) { CW.held.x = CW.x; CW.held.y = CW.y + 20; }
-        if (CW.y <= 50) { CW.y = 50; CW.st = 'carry'; CW.startX = CW.x; if (!CW.held) { CW.msg = '아깝다! 다시 해 봐요'; sfx.bad(); } }
+        if (CW.y <= 50) { CW.y = 50; CW.st = 'carry'; CW.startX = CW.x; if (!CW.held) { CW.msg = '아깝다! 다시 해 봐요'; jingle('aww'); } }
         break;
       case 'carry': {
         CW.x -= 60 * dt;
         if (CW.held) {
           CW.held.x = CW.x; CW.held.y = CW.y + 20;
           const prog = (CW.startX - CW.x) / Math.max(1, CW.startX - 98);
-          if (CW.slipAt > 0 && prog >= CW.slipAt) { CW.held.st = 'fall'; CW.held.vy = 0; CW.held = null; CW.msg = '앗, 떨어졌어요!'; sfx.bad(); }
+          if (CW.slipAt > 0 && prog >= CW.slipAt) { CW.held.st = 'fall'; CW.held.vy = 0; CW.held = null; CW.msg = '앗, 떨어졌어요!'; sfx.slip(); }
         }
-        if (CW.x <= 98) { CW.x = 98; CW.st = 'release'; CW.t = 0; if (CW.held) { CW.held.st = 'fall'; CW.held.vy = 0; CW.held = null; } }
+        if (CW.x <= 98) { CW.x = 98; CW.st = 'release'; CW.t = 0; sfx.clunk(); if (CW.held) { CW.held.st = 'fall'; CW.held.vy = 0; CW.held = null; } }
         break;
       }
       case 'release':
@@ -1435,7 +1736,8 @@ SC.claw = {
 const D = { ph: 'ready', t: 0, x: 160, items: [], spawn: 0, eaten: 0, combo: 0, best: 0, coins: 0, spicy: 0, stun: 0, speed: 0, dist: 0, face: 0, res: null, lines: [] };
 const DROP_DUR = 18;
 SC.drop = {
-  enter() { Object.assign(D, { ph: 'ready', t: 0, x: 160, items: [], spawn: .5, eaten: 0, combo: 0, best: 0, coins: 0, spicy: 0, stun: 0, speed: 0, dist: 0, face: 0, res: null, lines: [] }); },
+  music() { return D.ph === 'fall' ? 'fall' : D.ph === 'ready' || D.ph === 'result' ? 'park' : null; },
+  enter() { Object.assign(D, { landed: false, clack: 0, ph: 'ready', t: 0, x: 160, items: [], spawn: .5, eaten: 0, combo: 0, best: 0, coins: 0, spicy: 0, stun: 0, speed: 0, dist: 0, face: 0, res: null, lines: [] }); },
   start() { if (D.ph === 'ready' || D.ph === 'result') { this.enter(); D.ph = 'rise'; sfx.click(); } },
   alt() {
     if (D.ph === 'rise') return 80 * ease(D.t / 2.2);
@@ -1446,7 +1748,14 @@ SC.drop = {
   update(dt) {
     D.t += dt;
     D.face -= dt; D.spicy -= dt; D.stun -= dt;
-    if (D.ph === 'rise') { D.dist += dt * 40; if (D.t >= 2.2) { D.ph = 'count'; D.t = 0; sfx.beep(); } }
+    const wind = D.ph === 'rise' || D.ph === 'count' || D.ph === 'fall' || D.ph === 'land';
+    if (wind) { const wl = loop('wind'), a = this.alt() / 80; if (wl) wl.set(D.ph === 'fall' ? .16 + .1 * (D.t / DROP_DUR) : D.ph === 'land' ? .16 * D.speed / 190 : .03 + .1 * a, D.ph === 'fall' ? 900 + D.speed * 6 : 500 + a * 500); }
+    else loopOff('wind');
+    if (D.ph === 'rise') {
+      D.dist += dt * 40; D.clack = (D.clack || 0) - dt;
+      if (D.clack <= 0) { D.clack = .16; sfx.clack(); }
+      if (D.t >= 2.2) { D.ph = 'count'; D.t = 0; sfx.beep(); }
+    }
     else if (D.ph === 'count') {
       if (Math.floor(D.t / .8) !== Math.floor((D.t - dt) / .8) && D.t < 2.4) sfx.beep();
       if (D.t >= 2.4) { D.ph = 'fall'; D.t = 0; sfx.whoosh(); sfx.go(); }
@@ -1476,18 +1785,19 @@ SC.drop = {
           it.gone = true;
           if (it.type === 'tang') {
             D.eaten++; D.combo++; const c = 4 + Math.min(D.combo, 8); D.coins += c; D.face = .4;
-            sfx.crunch(); burst(D.x, 60, ['#ef3f5a', '#ffffff', '#b6e36a', '#ffa62b'], 10, 60, 60, .5);
+            sfx.bite(pick(['berry', 'grape', 'mandarin'])); if (D.combo >= 2) sfx.combo(D.combo); burst(D.x, 60, ['#ef3f5a', '#ffffff', '#b6e36a', '#ffa62b'], 10, 60, 60, .5);
             pop(D.combo >= 3 ? '콤보 ' + D.combo : '와삭!', D.x, 38);
-          } else if (it.type === 'star') { D.coins += 15; sfx.coin(); pop('+15', D.x, 38, C.gold); burst(D.x, 60, [C.gold, '#ffffff'], 12, 70, 40, .6); }
+          } else if (it.type === 'star') { D.coins += 15; sfx.sparkle(); pop('+15', D.x, 38, C.gold); burst(D.x, 60, [C.gold, '#ffffff'], 12, 70, 40, .6); }
           else if (it.type === 'chili') { D.spicy = 1.8; D.combo = 0; sfx.spicy(); pop('매워!!', D.x, 38, '#ff6a6a'); }
-          else { D.stun = .6; D.combo = 0; sfx.deny(); pop('꺄악!', D.x, 38, '#ffffff'); }
+          else { D.stun = .6; D.combo = 0; sfx.squawk(); pop('꺄악!', D.x, 38, '#ffffff'); }
         }
       }
       D.items = D.items.filter(it => it.y > -40 && !it.gone);
       if (!reduceMotion && Math.random() < dt * 30) D.lines.push({ x: rnd(0, W), y: H + 10, l: rnd(10, 26) });
-      if (D.t >= DROP_DUR) { D.ph = 'land'; D.t = 0; D.items = []; }
+      if (D.t >= DROP_DUR) { D.ph = 'land'; D.t = 0; D.items = []; sfx.brake(); }
     } else if (D.ph === 'land') {
       D.speed = Math.max(0, 190 * (1 - D.t / 1.1));
+      if (D.t >= 1.1 && !D.landed) { D.landed = true; sfx.thud(); }
       if (D.t >= 1.8) this.finish();
     }
     for (const l of D.lines) l.y -= (D.speed * 2.2 + 40) * dt;
@@ -1498,7 +1808,8 @@ SC.drop = {
     const fans = Math.round(D.eaten * 1.2) + (newBest && D.eaten > 0 ? 5 : 0);
     if (newBest) G.dropBest = D.eaten;
     G.coins += D.coins; G.fans += fans; save();
-    D.res = { fans, newBest }; D.ph = 'result'; D.t = 0; sfx.coin();
+    D.res = { fans, newBest }; D.ph = 'result'; D.t = 0;
+    jingle(newBest && D.eaten > 0 ? 'fanfare' : 'nice'); sfx.coinRoll(Math.min(10, Math.ceil(D.coins / 10)));
   },
   key(k) { if ((k === ' ' || k === 'Enter') && (D.ph === 'ready')) this.start(); },
   draw() {
@@ -1591,21 +1902,23 @@ SC.drop = {
 const CL = { tab: 'outfit', sel: 'apron' };
 const LISTS = { outfit: OUTFITS, hair: HAIRS, band: BANDS };
 function buy(tab, item) {
-  if (G.own[tab].includes(item.id)) { G.eq[tab] = item.id; save(); sfx.pop(); return; }
+  if (G.own[tab].includes(item.id)) { G.eq[tab] = item.id; save(); sfx.rustle(); sfx.sparkle(); return; }
   if (item.price < 0) { sfx.deny(); toast('뽑기 도감을 완성하면 받아요'); return; }
   if (G.coins < item.price) { sfx.deny(); toast('코인이 ' + (item.price - G.coins) + '개 부족해요'); return; }
   G.coins -= item.price; G.own[tab].push(item.id); G.eq[tab] = item.id; save();
-  sfx.buy(); burst(69, 90, [C.gold, '#ffffff', C.pink], 20, 80, 60, .8);
+  sfx.chaching(); sfx.rustle(); burst(69, 90, [C.gold, '#ffffff', C.pink], 20, 80, 60, .8);
   toast(item.name + '을(를) 샀어요');
 }
 SC.closet = {
+  music() { return 'boutique'; },
   enter() { CL.tab = 'outfit'; CL.sel = G.eq.outfit; },
   key(k) {
     const tabs = ['outfit', 'hair', 'band'];
-    if (k === 'ArrowLeft' || k === 'ArrowRight') { const i = (tabs.indexOf(CL.tab) + (k === 'ArrowLeft' ? 2 : 1)) % 3; CL.tab = tabs[i]; CL.sel = G.eq[CL.tab]; sfx.click(); }
+    if (k === 'ArrowLeft' || k === 'ArrowRight') { const i = (tabs.indexOf(CL.tab) + (k === 'ArrowLeft' ? 2 : 1)) % 3; CL.tab = tabs[i]; CL.sel = G.eq[CL.tab]; sfx.swish(); }
     if (k === 'ArrowUp' || k === 'ArrowDown') {
       const L = LISTS[CL.tab], i = L.findIndex(v => v.id === CL.sel);
-      CL.sel = L[(i + (k === 'ArrowUp' ? L.length - 1 : 1)) % L.length].id; sfx.click();
+      const ni = (i + (k === 'ArrowUp' ? L.length - 1 : 1)) % L.length;
+      CL.sel = L[ni].id; sfx.bell(ni);
     }
   },
   draw() {
@@ -1625,7 +1938,7 @@ SC.closet = {
     // 탭
     [['outfit', '옷'], ['hair', '머리'], ['band', '머리띠']].forEach(([id, name], i) => {
       const x = 132 + i * 62, on = CL.tab === id;
-      button('tab' + id, x, 20, 58, 15, name, () => { CL.tab = id; CL.sel = G.eq[id]; }, { col: on ? C.pink : C.lav, dark: on ? C.pinkD : C.lavD });
+      button('tab' + id, x, 20, 58, 15, name, () => { CL.tab = id; CL.sel = G.eq[id]; sfx.swish(); }, { col: on ? C.pink : C.lav, dark: on ? C.pinkD : C.lavD });
     });
     // 목록
     LISTS[CL.tab].forEach((it, i) => {
@@ -1636,13 +1949,13 @@ SC.closet = {
       const prev = lulu(Object.assign({}, G.eq, { [CL.tab]: it.id }), 'idle', 0, 'n/smile');
       if (CL.tab === 'outfit') ctx.drawImage(prev, 0, 18, 20, 14, x + 3, y + 8, 20, 14);
       else ctx.drawImage(prev, 0, 0, 20, 19, x + 3, y + 6, 20, 19);
-      text(it.name, x + 26, y + 5, { f: F.m, c: C.ink });
+      text(it.name, x + 26, y + 5, { f: tw(it.name, F.m) > 58 ? F.s : F.m, c: C.ink });
       const own = G.own[CL.tab].includes(it.id), on = G.eq[CL.tab] === it.id;
       if (on) text('입는 중', x + 26, y + 18, { f: F.s, c: C.pinkD });
       else if (own) text('보유', x + 26, y + 18, { f: F.s, c: C.ink2 });
       else if (it.price < 0) text('도감 보상', x + 26, y + 18, { f: F.s, c: C.lavD });
       else { blit(ICON.coin, x + 26, y + 18); text(String(it.price), x + 35, y + 18, { f: F.s, c: G.coins >= it.price ? C.goldD : C.redD }); }
-      hit('it' + it.id, x, y, 88, 30, () => { CL.sel = it.id; });
+      hit('it' + it.id, x, y, 88, 30, () => { CL.sel = it.id; sfx.bell(i); });
     });
     const item = LISTS[CL.tab].find(v => v.id === CL.sel);
     const own = G.own[CL.tab].includes(item.id), on = G.eq[CL.tab] === item.id;
@@ -1661,14 +1974,19 @@ SC.closet = {
 };
 
 // ---------- HUD
+function soundToggles(x, y) {
+  blit(G.music ? ICON.noteOn : ICON.noteOff, x + 1, y);
+  hit('mus', x - 3, y - 4, 17, 15, () => { audio(); setMusic(!G.music); toast(G.music ? '배경음악을 켰어요' : '배경음악을 껐어요'); });
+  blit(G.sfx ? ICON.spkOn : ICON.spkOff, x + 21, y);
+  hit('sfx', x + 17, y - 4, 19, 15, () => { audio(); setSfx(!G.sfx); toast(G.sfx ? '효과음을 켰어요' : '효과음을 껐어요'); });
+}
 function hud() {
   rect(0, 0, W, 15, C.night); rect(0, 15, W, 1, C.ink);
   if (scene === SC.park) text('룰루랜드', 6, 3, { f: F.m, c: '#ffd0e0' });
   else button('back', 2, 1, 50, 13, '◀ 랜드로', () => go('park'), { key: 'Escape', f: F.s, col: C.lav, dark: C.lavD });
-  blit(ICON.coin, 206, 4); text(String(G.coins), 215, 3, { f: F.m, c: '#ffe28a' });
-  blit(ICON.heart, 256, 4); text(String(G.fans), 265, 3, { f: F.m, c: '#ffc2d8' });
-  blit(G.sound ? ICON.spkOn : ICON.spkOff, 305, 4);
-  hit('snd', 300, 0, 20, 15, () => setSound(!G.sound));
+  blit(ICON.coin, 190, 4); text(String(G.coins), 199, 3, { f: F.m, c: '#ffe28a' });
+  blit(ICON.heart, 236, 4); text(String(G.fans), 245, 3, { f: F.m, c: '#ffc2d8' });
+  soundToggles(284, 4);
 }
 
 // ---------- 루프
@@ -1679,11 +1997,12 @@ function update(dt) {
     if (fade >= 1) {
       fade = 1; fadeDir = -1;
       const prev = scene; scene = SC[nextScene.name];
-      P.length = 0;
+      P.length = 0; loopsOff();
       scene.enter && scene.enter(prev === SC.park ? null : Object.keys(SC).find(k => SC[k] === prev));
     }
   } else if (fadeDir === -1) { fade -= dt * 5; if (fade <= 0) { fade = 0; fadeDir = 0; } }
   scene.update && scene.update(dt);
+  setTrack(scene.music ? scene.music() : null);
   updP(dt);
   if (toastT > 0) toastT -= dt;
 }
