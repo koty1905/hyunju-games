@@ -19,6 +19,7 @@ FACES = [  # (css family, weight, file)
     ('Galmuri9', 400, 'Galmuri9.ttf'),
     ('Galmuri11', 400, 'Galmuri11.ttf'),
     ('Galmuri11', 700, 'Galmuri11-Bold.ttf'),
+    ('Galmuri14', 400, 'Galmuri14.ttf'),
 ]
 
 

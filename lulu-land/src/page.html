@@ -24,8 +24,18 @@ body {
   padding-inline: 16px;
   padding-block: 20px 28px;
 }
-.wrap { max-width: 960px; margin: 0 auto; display: grid; gap: 14px; }
+.wrap { max-width: 1680px; margin: 0 auto; display: grid; gap: 14px; }
+.game { display: grid; gap: 12px; justify-items: center; }
 header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+header p { flex: 1 1 16em; }
+.fs {
+  align-self: center; font: 11px/1 Galmuri11, system-ui, sans-serif; color: var(--ink); cursor: pointer;
+  background: var(--mint); border: 0; padding: 7px 10px 8px;
+  box-shadow: 0 0 0 2px var(--ink), 0 3px 0 2px #2f8f70;
+}
+.fs:hover { background: #a9f0d3; }
+.fs:active { transform: translateY(2px); box-shadow: 0 0 0 2px var(--ink), 0 1px 0 2px #2f8f70; }
+.fs:focus-visible { outline: 3px solid var(--gold); outline-offset: 4px; }
 h1 {
   margin: 0; font: 700 24px/1.2 Galmuri11, system-ui, sans-serif; color: var(--frame);
   text-shadow: 2px 0 var(--ink), -2px 0 var(--ink), 0 2px var(--ink), 0 -2px var(--ink), 3px 3px 0 #1c0f25;
@@ -34,10 +44,18 @@ h1 {
 header p { margin: 0; color: var(--muted); font-family: Galmuri9, system-ui, sans-serif; }
 .screen {
   position: relative;
+  /* 창 높이에 맞춰 16:9 화면이 한눈에 들어오게 */
+  width: min(100%, calc((100vh - 150px) * 16 / 9 + 12px));
+  width: min(100%, calc((100dvh - 150px) * 16 / 9 + 12px));
+  min-width: min(100%, 320px);
   background: var(--frame);
   padding: 6px;
   box-shadow: 0 0 0 3px var(--ink), 6px 6px 0 3px #1c0f25;
 }
+.screen:fullscreen { width: 100vw; height: 100vh; padding: 0; box-shadow: none; background: #1c0f25; display: grid; place-items: center; }
+.screen:fullscreen canvas { width: min(100vw, calc(100vh * 16 / 9)); box-shadow: none; }
+.screen:-webkit-full-screen { width: 100vw; height: 100vh; padding: 0; box-shadow: none; background: #1c0f25; display: grid; place-items: center; }
+.screen:-webkit-full-screen canvas { width: min(100vw, calc(100vh * 16 / 9)); box-shadow: none; }
 canvas {
   display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; height: auto;
   image-rendering: pixelated; image-rendering: crisp-edges;
@@ -62,8 +80,10 @@ footer a { color: var(--mint); }
   <header>
     <h1>룰루랜드</h1>
     <p>탕후루를 만들고, 설탕 코팅을 입히고, 룰루의 먹방을 보는 픽셀 테마파크</p>
+    <button class="fs" id="fs" type="button">전체 화면</button>
   </header>
-  <div class="screen">
+  <div class="game">
+  <div class="screen" id="screen">
     <canvas id="game" width="1280" height="720" tabindex="0" aria-label="룰루랜드 게임 화면. 화면을 누르거나 키보드로 조작해요."></canvas>
   </div>
   <ul class="keys" aria-label="조작법">
@@ -74,8 +94,10 @@ footer a { color: var(--mint); }
     <li><kbd>Esc</kbd> 랜드로</li>
     <li><kbd>M</kbd> 배경음악</li>
     <li><kbd>N</kbd> 효과음</li>
+    <li><kbd>F</kbd> 전체 화면</li>
     <li>화면을 눌러도 모두 돼요</li>
   </ul>
+  </div>
   <footer>팬 창작 게임입니다. 캐릭터·게임 콘셉트는 모바일 게임 「탕후루의 달인」(Tanghulu Master)의 룰루랜드에서 빌려 왔고, 그림과 코드는 모두 새로 만들었어요. 글꼴: 갈무리(Galmuri, SIL OFL 1.1). 진행 기록은 이 브라우저에만 저장돼요.</footer>
 </div>
 <script>
