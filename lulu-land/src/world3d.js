@@ -357,12 +357,12 @@
     buildFerris(S, 16, -34);
     // 나무
     const rnd = mulberry(7);
-    for (let i = 0; i < 26; i++) tree(S, -30 + i * 2.4 + rnd() * 1.5, -8.5 - rnd() * 6, .8 + rnd() * .6, rnd);
-    for (const [x, z] of [[-24, -4], [-12.5, -4.5], [-2.5, -4.2], [5.5, -4.6], [15, -4.3], [24, -3.8]]) tree(S, x, z, .75, rnd);
+    for (let i = 0; i < 30; i++) tree(S, -30 + i * 2.4 + rnd() * 1.5, -8.5 - rnd() * 6, .8 + rnd() * .6, rnd);
+    for (const [x, z] of [[-24, -4], [-12.5, -4.5], [-2.5, -4.2], [5.5, -4.6], [15, -4.3], [22.5, -4.4], [31.5, -4]]) tree(S, x, z, .75, rnd);
     // 가게들
-    buildShop(S); buildClaw(S); buildDrop(S); buildCloset(S); buildFountain(S);
-    for (const wx of [205, 380, 560, 770]) buildLamp(S, wx2X(wx));
-    const LX = [205, 380, 560, 770].map(wx2X);
+    buildShop(S); buildClaw(S); buildDrop(S); buildCloset(S); buildFountain(S); buildMart(S);
+    for (const wx of [205, 380, 560, 770, 875, 1075]) buildLamp(S, wx2X(wx));
+    const LX = [205, 380, 560, 770, 875, 1075].map(wx2X);
     for (let i = 0; i < LX.length - 1; i++) buildBunting(S, LX[i], LX[i + 1]);
     // 룰루와 손님
     PK.lulu = null;
@@ -523,6 +523,34 @@
     g.add(box(1.3, 2.5, .15, stdM('#b69cff', { roughness: .5 }), 2, 1.25, -2.4));
     g.add(sph(.07, stdM('#ffc857', { metalness: .6, roughness: .3 }), 2.45, 1.2, -2.28, 8, 6));
   }
+  function buildMart(S) {
+    const g = boothGroup('mart', wx2X(975));
+    g.add(box(7.6, 4.2, 3.6, stdM('#f4fff7', { roughness: .95 }), 0, 2.1, -4.2));
+    g.add(box(7.7, .45, 3.7, stdM('#bfe9cb'), 0, .22, -4.2));
+    g.add(box(8, .3, 4, stdM('#2e9e5a', { roughness: .6 }), 0, 4.35, -4.2));
+    awning(g, 7.5, '#5cc97a', '#ffffff', 3.55, -1.9);
+    g.add(signBox('신선 마트', 4.6, 1.1, .25, '#2e9e5a', '#ffffff', 0, 5.05, -3.4));
+    // 유리 진열창과 선반
+    const glass = new T.Mesh(new T.BoxGeometry(4.2, 2.3, .06), new T.MeshPhysicalMaterial({ color: col('#e8fff4'), roughness: .05, transmission: .8, transparent: true, clearcoat: 1, depthWrite: false }));
+    glass.position.set(-1.3, 1.75, -2.35); glass.renderOrder = 3; g.add(glass);
+    g.add(box(4.4, 2.5, .15, stdM('#ffffff', { roughness: .6 }), -1.3, 1.75, -2.55));
+    const shelfCols = ['#e8233f', '#ff7a1a', '#ffe066', '#8fd3ff', '#a58bff', '#7fd15f', '#ff8fb3'];
+    for (let r = 0; r < 3; r++) {
+      g.add(box(4, .06, .5, stdM('#d99a6c'), -1.3, .9 + r * .7, -2.75));
+      for (let i = 0; i < 8; i++) g.add(box(.32, .38, .3, stdM(shelfCols[(i + r * 3) % 7], { roughness: .5 }), -3 + i * .48, 1.12 + r * .7, -2.75));
+    }
+    const lit = box(4, .06, .3, glowM('#ffffff', 1.8), -1.3, 2.85, -2.45); lit.castShadow = false; g.add(lit);
+    g.add(box(1.4, 2.5, .15, new T.MeshPhysicalMaterial({ color: col('#e8fff4'), roughness: .05, transmission: .6, transparent: true, clearcoat: 1 }), 2.3, 1.25, -2.4));
+    g.add(box(.08, 2.5, .2, stdM('#2e9e5a'), 1.6, 1.25, -2.35)); g.add(box(.08, 2.5, .2, stdM('#2e9e5a'), 3, 1.25, -2.35));
+    // 과일 상자와 장바구니 수레
+    const crate = (x, c) => { g.add(box(.9, .45, .6, stdM('#c98a4f', { roughness: .8 }), x, .45, -1.6)); for (let i = 0; i < 6; i++) g.add(sph(.13, stdM(c, { roughness: .4 }), x - .3 + (i % 3) * .3, .75, -1.75 + Math.floor(i / 3) * .28, 10, 8)); g.add(box(.2, .5, .05, stdM('#8a5a31'), x, .25, -1.28)); };
+    crate(-3.1, '#ef3f5a'); crate(-2.1, '#ffa62b'); crate(-1.1, '#b6e36a');
+    const cart = new T.Group(); const wire = stdM('#9aa0bb', { metalness: .6, roughness: .3 });
+    cart.add(box(.9, .6, .6, new T.MeshStandardMaterial({ color: col('#9aa0bb'), metalness: .6, roughness: .3, wireframe: true }), 0, .75, 0));
+    cart.add(cyl(.02, .02, .8, wire, .5, .9, 0, 6)).children; cart.add(box(.05, .05, .7, stdM('#e8233f'), .55, 1.2, 0));
+    for (const [x, z] of [[-.35, -.25], [.35, -.25], [-.35, .25], [.35, .25]]) cart.add(sph(.07, stdM('#3b1f3a'), x, .08, z, 8, 6));
+    cart.position.set(3.4, 0, -1.4); cart.rotation.y = -.4; g.add(cart);
+  }
   function buildFountain(S) {
     const g = boothGroup('fountain', wx2X(830));
     g.userData.booth = null;
@@ -582,7 +610,7 @@
   }
 
   // ================= 탕후루 가게 =================
-  const KT = { scene: null, cam: null, pitch: 0, pitchT: 0, fixedPitch: {}, pools: {}, used: {}, pieces: {}, stickPool: [], stickUsed: 0, spritePool: [], spriteUsed: 0, pot: null, potOn: false, board: null, boardOn: false, steam: [], look: {} };
+  const KT = { scene: null, cam: null, pitch: 0, pitchT: 0, fixedPitch: {}, pools: {}, used: {}, pieces: {}, stickPool: [], stickUsed: 0, spritePool: [], spriteUsed: 0, pot: null, potOn: false, board: null, boardOn: false, steam: [], look: {}, foodPools: {}, foodUsed: {}, steamSrc: null, stream: null };
   function buildKitchen() {
     const S = KT.scene = new T.Scene();
     const cam = KT.cam = new T.PerspectiveCamera(30, 16 / 9, .1, 80);
@@ -694,6 +722,154 @@
     return pool[n - 1];
   }
 
+  // ================= 신선 마트 즉석 요리 모형 =================
+  // 모든 모형은 폭 2(반지름 1) 기준으로 만들고, 2D 배치 크기에 맞춰 키운다.
+  function cupLabelTex(main, band, text) {
+    return ctex(512, 256, (g, w, h) => {
+      g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h);
+      g.fillStyle = band; g.fillRect(0, h * .16, w, h * .66);
+      g.fillStyle = main; g.fillRect(0, h * .22, w, h * .54);
+      g.font = 'bold 48px Galmuri11, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      for (const x of [w * .25, w * .75]) { g.fillStyle = 'rgba(0,0,0,.25)'; g.fillText(text, x + 3, h * .5 + 3); g.fillStyle = '#ffffff'; g.fillText(text, x, h * .5); }
+      g.fillStyle = 'rgba(255,255,255,.4)'; for (let x = 8; x < w; x += 24) g.fillRect(x, h * .86, 8, 8);
+    }, { nearest: true });
+  }
+  function lidTex(main, text) {
+    return ctex(256, 256, (g, w, h) => {
+      const r = g.createLinearGradient(0, 0, w, h); r.addColorStop(0, '#f4f6fb'); r.addColorStop(.5, '#c9cede'); r.addColorStop(1, '#eef0f6');
+      g.fillStyle = r; g.fillRect(0, 0, w, h);
+      g.fillStyle = main; g.beginPath(); g.arc(w / 2, h / 2, 78, 0, 7); g.fill();
+      g.font = 'bold 36px Galmuri11, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.fillText(text, w / 2, h / 2 + 2);
+    });
+  }
+  let noodleTexC = null;
+  function noodleTex() {
+    if (noodleTexC) return noodleTexC;
+    return (noodleTexC = ctex(256, 256, (g, w, h) => {
+      g.fillStyle = '#e9b95a'; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 70; i++) {
+        g.strokeStyle = i % 3 ? '#ffe7a3' : '#f7cf73'; g.lineWidth = 3; g.beginPath();
+        const y0 = Math.random() * h, ph = Math.random() * 6;
+        for (let x = 0; x <= w; x += 6) { const y = y0 + Math.sin(x / 9 + ph) * 5; x ? g.lineTo(x, y) : g.moveTo(x, y); }
+        g.stroke();
+      }
+    }));
+  }
+  function makeCup(kind) {
+    const g = new T.Group();
+    const ramen = kind === 'ramen';
+    const wallPts = []; for (let i = 0; i <= 10; i++) { const t = i / 10; wallPts.push(new T.Vector2(.72 + .28 * t, -.86 + .86 * t)); }
+    g.add(mesh(new T.LatheGeometry(wallPts, 44), new T.MeshStandardMaterial({ map: ramen ? cupLabelTex('#e8233f', '#ffc857', '사발면') : cupLabelTex('#ff7a1a', '#ffe28a', '떡볶이'), roughness: .5 })));
+    const inner = mesh(new T.LatheGeometry(wallPts.map(p => new T.Vector2(p.x * .965, p.y)), 44), stdM('#fff6ea', { side: T.BackSide, roughness: .9 }), 0, 0, 0, false); inner.receiveShadow = true; g.add(inner);
+    const bottom = mesh(new T.CircleGeometry(.72, 32), stdM('#fff6ea'), 0, -.85, 0, false); bottom.rotation.x = -Math.PI / 2; g.add(bottom);
+    const rim = mesh(new T.TorusGeometry(1, .035, 6, 48), stdM('#ffffff', { roughness: .4 })); rim.rotation.x = Math.PI / 2; g.add(rim);
+    const broth = mesh(new T.CircleGeometry(1, 40), new T.MeshPhysicalMaterial({ color: col('#cfeeff'), roughness: .06, clearcoat: 1, transparent: true, opacity: .82 }), 0, -.8, 0, false);
+    broth.rotation.x = -Math.PI / 2; broth.receiveShadow = true; g.add(broth); g.broth = broth;
+    const nt = noodleTex();
+    const dry = cyl(.62, .62, .32, new T.MeshStandardMaterial({ map: nt, color: col('#f5d27a'), roughness: .8 }), 0, -.66, 0, 24); g.add(dry); g.dry = dry;
+    const wetTop = new T.MeshStandardMaterial({ map: nt, color: col('#fff0b8'), roughness: .45 });
+    const wet = mesh(new T.CylinderGeometry(.9, .9, .12, 36), [stdM('#f4d58a'), wetTop, stdM('#f4d58a')], 0, -.2, 0, false); wet.receiveShadow = true; g.add(wet); g.wet = wet;
+    const tt = new T.Group(); g.add(tt); g.tteok = tt;
+    for (let i = 0; i < 11; i++) { const p = cyl(.085, .085, .42, stdM('#fff7ec', { roughness: .6 }), (Math.random() - .5) * 1.1, 0, (Math.random() - .5) * 1.1, 10); p.rotation.set(Math.PI / 2, Math.random() * 3, 0); p.castShadow = false; tt.add(p); }
+    // 토핑
+    const tg = new T.Group(); g.add(tg); g.tg = tg; g.tops = {};
+    const add = (id, obj) => { tg.add(obj); g.tops[id] = obj; };
+    const egg = new T.Group(); const ew = sph(.3, stdM('#fffdf6', { roughness: .5 }), 0, 0, 0, 16, 10); ew.scale.set(1, .32, 1); egg.add(ew); egg.add(sph(.13, new T.MeshPhysicalMaterial({ color: col('#ffb020'), roughness: .2, clearcoat: 1 }), .02, .08, .02, 14, 10)); egg.position.set(-.38, 0, .22); add('egg', egg);
+    const cheese = box(.72, .025, .72, stdM('#ffd23f', { roughness: .45 }), .22, .03, -.1); cheese.rotation.set(.12, .5, .08); add('cheese', cheese);
+    const kim = new T.Group(); for (let i = 0; i < 6; i++) { const b = box(.16, .04, .1, stdM(i % 2 ? '#e8472e' : '#d6362a', { roughness: .4 }), .3 + (Math.random() - .5) * .3, .02, .35 + (Math.random() - .5) * .3); b.rotation.y = Math.random() * 3; kim.add(b); } add('kimchi', kim);
+    const oni = new T.Group(); for (let i = 0; i < 10; i++) { const r = mesh(new T.TorusGeometry(.05, .018, 6, 12), stdM(i % 3 ? '#7fd15f' : '#e9ffd8'), (Math.random() - .5) * 1.2, .03, (Math.random() - .5) * 1.2, false); r.rotation.x = Math.PI / 2; oni.add(r); } add('onion', oni);
+    const sau = new T.Group(); for (let i = 0; i < 5; i++) { const s = cyl(.12, .12, .05, stdM('#f08a8a', { roughness: .45 }), -.1 + (i % 3) * .25 - .2, .03, -.35 + Math.floor(i / 3) * .3, 16); sau.add(s); } add('sausage', sau);
+    // 뚜껑: 뒤쪽 가장자리를 축으로 벗겨진다
+    const pivot = new T.Group(); pivot.position.set(0, .035, -1); g.add(pivot);
+    const lid = mesh(new T.CircleGeometry(1.04, 40), new T.MeshStandardMaterial({ map: ramen ? lidTex('#e8233f', '사발면') : lidTex('#ff7a1a', '떡볶이'), roughness: .3, metalness: .35, side: T.DoubleSide }), 0, 0, 1);
+    lid.rotation.x = -Math.PI / 2; pivot.add(lid); g.lid = pivot;
+    g.update = (st, c, u) => {
+      g.lid.rotation.x = -(st.lid || 0) * 2.3;
+      g.lid.visible = (st.lid || 0) < .99;
+      const lv = clamp(st.level || 0, 0, 1.05), y = -.84 + lv * .82, r = .72 + .28 * ((y + .86) / .86);
+      g.broth.visible = lv > .02; g.broth.position.y = y; g.broth.scale.setScalar(r * .97);
+      const soupCol = ramen ? '#e7873d' : '#d9262a';
+      g.broth.material.color.copy(col(st.soup && lv > .05 ? (st.cooked || !ramen ? soupCol : '#f2b57a') : '#cfeeff'));
+      g.broth.material.opacity = st.soup ? .95 : .78;
+      const left = st.left != null ? st.left : 1;
+      g.dry.visible = ramen && !st.cooked;
+      g.wet.visible = ramen && !!st.cooked && left > .05;
+      g.wet.position.y = Math.min(y - .02, -.1) - (1 - left) * .35; g.wet.scale.set(.6 + .4 * left, 1, .6 + .4 * left);
+      g.tteok.visible = !ramen && left > .05; g.tteok.position.y = Math.max(-.7, Math.min(y, -.3)) - .05;
+      g.tteok.rotation.y = st.stir || 0; g.tteok.children.forEach((p, i) => { p.visible = i / g.tteok.children.length < left; });
+      const surf = ramen ? g.wet.position.y + .07 : g.tteok.position.y + .1;
+      tg.position.y = surf; tg.rotation.y = !ramen ? (st.stir || 0) : 0;
+      for (const id in g.tops) g.tops[id].visible = !!(st.tops && st.tops.includes(id)) && left > .3;
+      if (st.tops && st.tops.includes('cheese') && st.cooked) g.tops.cheese.scale.set(1.15, .6, 1.15);
+      else g.tops.cheese.scale.set(1, 1, 1);
+      if (st.steam) KT.steamSrc = { pos: new T.Vector3(c.x, c.y + .05 * u * 50, c.z), s: u * 50, heat: st.steam };
+    };
+    return g;
+  }
+  function makeKimbap() {
+    const g = new T.Group();
+    const sh = new T.Shape();
+    sh.moveTo(0, .78); sh.quadraticCurveTo(.08, .86, .16, .74); sh.lineTo(.8, -.46); sh.quadraticCurveTo(.86, -.6, .7, -.6);
+    sh.lineTo(-.7, -.6); sh.quadraticCurveTo(-.86, -.6, -.8, -.46); sh.lineTo(-.16, .74); sh.quadraticCurveTo(-.08, .86, 0, .78);
+    const geo = new T.ExtrudeGeometry(sh, { depth: .5, bevelEnabled: true, bevelSize: .08, bevelThickness: .08, bevelSegments: 3, curveSegments: 8 });
+    geo.translate(0, 0, -.25);
+    const riceTex = ctex(128, 128, (g2, w, h) => { g2.fillStyle = '#fbfaf2'; g2.fillRect(0, 0, w, h); for (let i = 0; i < 380; i++) { g2.fillStyle = Math.random() < .5 ? '#ffffff' : '#ece8da'; g2.beginPath(); g2.ellipse(Math.random() * w, Math.random() * h, 2.4, 1.3, Math.random() * 3, 0, 7); g2.fill(); } }, { repeat: [3, 3] });
+    const rice = mesh(geo, stdM('#ffffff', { map: riceTex, roughness: .95 })); g.add(rice); g.rice = rice;
+    const nori = box(1.9, .55, .74, stdM('#1f3a2a', { roughness: .55 }), 0, -.36, 0); g.add(nori); g.nori = nori;
+    const fill = sph(.18, stdM('#ff8a5c', { roughness: .6 }), 0, .02, .27, 12, 8); fill.scale.z = .3; g.add(fill);
+    const planeL = new T.Plane(new T.Vector3(-1, 0, 0), 0), planeR = new T.Plane(new T.Vector3(1, 0, 0), 0);
+    const wrapMat = pl => new T.MeshPhysicalMaterial({ color: col('#f7fbff'), roughness: .15, transparent: true, opacity: .5, clearcoat: 1, depthWrite: false, clippingPlanes: [pl], side: T.DoubleSide });
+    const L = mesh(geo, wrapMat(planeL), 0, 0, 0, false), Rm = mesh(geo, wrapMat(planeR), 0, 0, 0, false);
+    L.scale.set(1.08, 1.08, 1.25); Rm.scale.set(1.08, 1.08, 1.25); L.renderOrder = Rm.renderOrder = 3; g.add(L, Rm);
+    const strip = box(.12, 1.5, .66, stdM('#e8233f', { roughness: .4 }), 0, .05, 0); g.add(strip);
+    const lab = box(.9, .32, .02, new T.MeshStandardMaterial({ map: signTex('참치마요', '#ffffff', '#e8233f', 256, 96, 36), roughness: .5 }), 0, -.05, .41); g.add(lab);
+    g.update = (st) => {
+      const s = st.wrap || 0, left = st.left != null ? st.left : 1;
+      strip.visible = s < 1; lab.visible = s < 2; L.visible = s < 2; Rm.visible = s < 3;
+      const wp = new T.Vector3(); g.getWorldPosition(wp); planeL.constant = wp.x; planeR.constant = -wp.x;
+      nori.scale.x = st.torn ? .45 : 1; nori.position.x = st.torn ? .45 : 0;
+      rice.scale.set(1, .35 + .65 * left, 1); rice.position.y = -(1 - left) * .4; fill.visible = left > .4 && left < .99;
+      nori.visible = left > .1;
+    };
+    return g;
+  }
+  function makeKettle() {
+    const g = new T.Group();
+    const body = mesh(new T.LatheGeometry([[0, -.6], [.6, -.6], [.7, -.45], [.72, 0], [.58, .35], [.3, .5], [0, .52]].map(p => new T.Vector2(p[0], p[1])), 36), stdM('#8fe3c0', { roughness: .3, metalness: .25 }));
+    g.add(body);
+    g.add(sph(.1, stdM('#3b1f3a'), 0, .58, 0, 10, 8));
+    const handle = mesh(new T.TorusGeometry(.42, .06, 8, 20, Math.PI), stdM('#3b1f3a', { roughness: .5 }), .05, .45, 0); handle.rotation.z = .1; g.add(handle);
+    const spout = cyl(.07, .13, .7, stdM('#8fe3c0', { roughness: .3, metalness: .25 }), -.85, .05, 0, 12); spout.rotation.z = .95; g.add(spout);
+    g.tip = new T.Vector3(-1.13, .27, 0);
+    g.update = () => {};
+    return g;
+  }
+  function makeMicrowave() {
+    const g = new T.Group();
+    g.add(box(2, 1.2, 1.2, stdM('#fff0f5', { roughness: .45 }), 0, 0, 0));
+    const win = box(1.2, .8, .02, new T.MeshStandardMaterial({ color: col('#2b2336'), emissive: col('#ffcf7a'), emissiveIntensity: 0, roughness: .1 }), -.3, 0, .61); g.add(win); g.win = win;
+    g.add(box(.36, .9, .03, stdM('#ffd0e0'), .7, 0, .61));
+    for (let i = 0; i < 3; i++) g.add(box(.2, .08, .03, stdM('#e0648f'), .7, .25 - i * .18, .63));
+    const disp = box(.26, .12, .03, new T.MeshBasicMaterial({ color: col('#7ee0c3').multiplyScalar(1.6) }), .7, .38, .63); g.add(disp); g.disp = disp;
+    const plate = cyl(.45, .45, .04, new T.MeshStandardMaterial({ color: col('#ffffff'), emissive: col('#ffcf7a'), emissiveIntensity: 0, transparent: true, opacity: .9 }), -.3, -.3, .2, 24); g.add(plate); g.plate = plate;
+    g.update = (st) => {
+      g.win.material.emissiveIntensity = st.on ? .9 + Math.sin(time * 8) * .05 : .05;
+      g.plate.material.emissiveIntensity = st.on ? .6 : 0; g.plate.rotation.y += st.on ? .05 : 0;
+      g.disp.visible = !st.on || Math.floor(time * 2) % 2 === 0;
+    };
+    return g;
+  }
+  function makeMilk() {
+    const g = new T.Group();
+    g.add(mesh(new T.LatheGeometry([[0, -.9], [.42, -.9], [.5, -.75], [.6, -.3], [.58, .1], [.38, .45], [.26, .62], [0, .63]].map(p => new T.Vector2(p[0], p[1])), 32), new T.MeshPhysicalMaterial({ color: col('#ffe066'), roughness: .25, clearcoat: .8 })));
+    g.add(cyl(.27, .27, .1, stdM('#ffffff'), 0, .66, 0, 20));
+    const lab = mesh(new T.CylinderGeometry(.61, .61, .34, 32, 1, true), new T.MeshStandardMaterial({ map: signTex('바나나우유', '#ffffff', '#e0a82b', 512, 96, 40), roughness: .5 }), 0, -.35, 0, false); g.add(lab);
+    const straw = cyl(.04, .04, 1.1, stdM('#ff8fb3', { roughness: .4 }), .08, 1.05, 0, 8); straw.rotation.z = -.15; g.add(straw); g.straw = straw;
+    g.update = (st) => { g.straw.visible = !!st.straw; };
+    return g;
+  }
+  const FOOD_MAKE = { ramen: makeCup, tteok: makeCup, kimbap: makeKimbap, kettle: makeKettle, micro: makeMicrowave, milk: makeMilk };
+
   // ---------- 크기 맞추기와 적응형 해상도
   let frameMs = 16, slowT = 0;
   function resize() {
@@ -712,7 +888,7 @@
       glCanvas = cv;
       R = new T.WebGLRenderer({ canvas: cv, antialias: false, alpha: false, powerPreference: 'high-performance' });
       R.setClearColor(0xffe4ee, 1);
-      R.shadowMap.enabled = true; R.shadowMap.type = T.PCFSoftShadowMap;
+      R.shadowMap.enabled = true; R.shadowMap.type = T.PCFSoftShadowMap; R.localClippingEnabled = true;
       R.outputEncoding = T.LinearEncoding; R.toneMapping = T.NoToneMapping;
       R.autoClear = true;
       buildPost();
@@ -729,7 +905,7 @@
   W3.begin = (view) => {
     if (!W3.ok) return;
     if (view !== W3.view) { W3.view = view; glCanvas.style.visibility = view ? 'visible' : 'hidden'; W3.snap = true; }
-    if (view === 'kitchen') { KT.used = {}; KT.stickUsed = 0; KT.spriteUsed = 0; KT.potOn = false; KT.boardOn = false; }
+    if (view === 'kitchen') { KT.used = {}; KT.stickUsed = 0; KT.spriteUsed = 0; KT.potOn = false; KT.boardOn = false; KT.foodUsed = {}; KT.steamSrc = null; KT.streamOn = false; }
   };
   // --- 거리·타이틀
   W3.park = (st) => {
@@ -796,6 +972,25 @@
     p.syrup.material.color.copy(col(syrupHex)); p.syrup.material.emissiveIntensity = .1 + heat * .5;
     p.heat = heat;
   };
+  // --- 즉석 요리: 2D 배치(가운데 좌표·폭)대로 모형을 세운다
+  W3.food = (kind, lx, ly, sizePx, st = {}) => {
+    const pool = KT.foodPools[kind] || (KT.foodPools[kind] = []);
+    const n = KT.foodUsed[kind] = (KT.foodUsed[kind] || 0) + 1;
+    if (!pool[n - 1]) { const m = FOOD_MAKE[kind](kind); KT.scene.add(m); pool.push(m); }
+    const m = pool[n - 1], c = onPlaneZ(KT.cam, lx, ly, st.z != null ? st.z : .8), u = upp(KT.cam, c);
+    m.visible = true; m.position.copy(c); m.scale.setScalar(sizePx * u / 2);
+    m.rotation.set(st.tiltX || 0, st.rotY || 0, st.rotZ || 0);
+    m.updateMatrixWorld(true);
+    m.update(st, c, u);
+    // 주전자 물줄기
+    if (kind === 'kettle' && st.pour) {
+      if (!KT.stream) { KT.stream = cyl(1, 1, 1, new T.MeshPhysicalMaterial({ color: col('#d8f1ff'), roughness: .05, transparent: true, opacity: .75, clearcoat: 1 }), 0, 0, 0, 10); KT.stream.castShadow = false; KT.scene.add(KT.stream); }
+      const a = m.localToWorld(m.tip.clone()), b = onPlaneZ(KT.cam, st.tx, st.ty, .8), r = 1.2 * u;
+      KT.streamOn = true; const sm = KT.stream; sm.visible = true;
+      sm.position.copy(a).add(b).multiplyScalar(.5); sm.scale.set(r * (1 + Math.sin(time * 30) * .1), a.distanceTo(b), r);
+      sm.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+    }
+  };
   // --- 프레임 마무리: 애니메이션과 렌더링
   W3.end = () => {
     if (!W3.ok) return;
@@ -826,7 +1021,7 @@
       tx = X;
     } else {
       PK.orbit.visible = false;
-      tx = clamp(wx2X(st.x), -14, 14);
+      tx = clamp(wx2X(st.x), -14, 24.5);
       PK.camX = W3.snap ? tx : PK.camX + (tx - PK.camX) * Math.min(1, dt * 4);
       cam.position.set(PK.camX, 5.4, 16.8); cam.lookAt(PK.camX, 2.1, -2.2);
       tx = PK.camX;
@@ -843,6 +1038,8 @@
     KT.stickPool.forEach((s, i) => { s.visible = i < KT.stickUsed; });
     KT.spritePool.forEach((s, i) => { s.visible = i < KT.spriteUsed; });
     KT.board.visible = KT.boardOn;
+    for (const k in KT.foodPools) KT.foodPools[k].forEach((m, i) => { if (i >= (KT.foodUsed[k] || 0)) m.visible = false; });
+    if (KT.stream) KT.stream.visible = !!KT.streamOn;
     const pot = KT.pot; pot.visible = KT.potOn;
     if (KT.potOn) {
       const heat = pot.heat || 0;
@@ -857,6 +1054,13 @@
         m.life += dt * (.25 + heat * .35); if (m.life > 1) { m.life -= 1; m.ox = (Math.random() - .5) * 1.2; }
         m.visible = heat > .1; m.position.set(wp.x + (m.ox || 0) * s + Math.sin(m.life * 4 + i) * .08 * s, wp.y + s * (.1 + m.life * 2.2), wp.z - .1);
         m.scale.setScalar(s * (.4 + m.life * 1.2)); m.material.opacity = Math.sin(m.life * Math.PI) * .22 * Math.min(1, heat * 1.5);
+      });
+    } else if (KT.steamSrc) {
+      const src = KT.steamSrc, heat = src.heat, s = src.s;
+      KT.steam.forEach((m, i) => {
+        m.life += dt * (.22 + heat * .3); if (m.life > 1) { m.life -= 1; m.ox = (Math.random() - .5) * 1.2; }
+        m.visible = true; m.position.set(src.pos.x + (m.ox || 0) * s * .8 + Math.sin(m.life * 4 + i) * .06 * s, src.pos.y + s * m.life * 1.8, src.pos.z - .1);
+        m.scale.setScalar(s * (.3 + m.life)); m.material.opacity = Math.sin(m.life * Math.PI) * .2 * Math.min(1, heat);
       });
     } else KT.steam.forEach(m => { m.visible = false; });
     if (KT.anim) KT.anim();
