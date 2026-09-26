@@ -53,16 +53,15 @@ header p { margin: 0; color: var(--muted); font-family: Galmuri9, system-ui, san
   box-shadow: 0 0 0 3px var(--ink), 6px 6px 0 3px #1c0f25;
 }
 .screen:fullscreen { width: 100vw; height: 100vh; padding: 0; box-shadow: none; background: #1c0f25; display: grid; place-items: center; }
-.screen:fullscreen canvas { width: min(100vw, calc(100vh * 16 / 9)); box-shadow: none; }
+.screen:fullscreen .stage { width: min(100vw, calc(100vh * 16 / 9)); }
 .screen:-webkit-full-screen { width: 100vw; height: 100vh; padding: 0; box-shadow: none; background: #1c0f25; display: grid; place-items: center; }
-.screen:-webkit-full-screen canvas { width: min(100vw, calc(100vh * 16 / 9)); box-shadow: none; }
-canvas {
-  display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; height: auto;
-  image-rendering: pixelated; image-rendering: crisp-edges;
-  background: #ffe4ee; touch-action: none; outline: none;
-  box-shadow: inset 0 0 0 2px var(--frame-dark);
-}
-canvas:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.screen:-webkit-full-screen .stage { width: min(100vw, calc(100vh * 16 / 9)); }
+/* 3D 무대(#world, three.js) 위에 픽셀 UI 캔버스(#game)를 겹친다 */
+.stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; background: #ffe4ee; box-shadow: inset 0 0 0 2px var(--frame-dark); }
+.stage canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+#world { visibility: hidden; pointer-events: none; }
+#game { image-rendering: pixelated; image-rendering: crisp-edges; background: transparent; touch-action: none; outline: none; }
+#game:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
 .keys { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-family: Galmuri9, system-ui, sans-serif; }
 .keys li { display: flex; align-items: center; gap: 6px; }
 kbd {
@@ -84,7 +83,10 @@ footer a { color: var(--mint); }
   </header>
   <div class="game">
   <div class="screen" id="screen">
-    <canvas id="game" width="1280" height="720" tabindex="0" aria-label="룰루랜드 게임 화면. 화면을 누르거나 키보드로 조작해요."></canvas>
+    <div class="stage">
+      <canvas id="world" width="1280" height="720" aria-hidden="true"></canvas>
+      <canvas id="game" width="1280" height="720" tabindex="0" aria-label="룰루랜드 게임 화면. 화면을 누르거나 키보드로 조작해요."></canvas>
+    </div>
   </div>
   <ul class="keys" aria-label="조작법">
     <li><kbd>← →</kbd> 걷기</li>
@@ -98,8 +100,12 @@ footer a { color: var(--mint); }
     <li>화면을 눌러도 모두 돼요</li>
   </ul>
   </div>
-  <footer>팬 창작 게임입니다. 캐릭터·게임 콘셉트는 모바일 게임 「탕후루의 달인」(Tanghulu Master)의 룰루랜드에서 빌려 왔고, 그림과 코드는 모두 새로 만들었어요. 글꼴: 갈무리(Galmuri, SIL OFL 1.1). 진행 기록은 이 브라우저에만 저장돼요.</footer>
+  <footer>팬 창작 게임입니다. 3D 무대는 three.js로 그립니다. 캐릭터·게임 콘셉트는 모바일 게임 「탕후루의 달인」(Tanghulu Master)의 룰루랜드에서 빌려 왔고, 그림과 코드는 모두 새로 만들었어요. 글꼴: 갈무리(Galmuri, SIL OFL 1.1). 진행 기록은 이 브라우저에만 저장돼요.</footer>
 </div>
+/*THREE*/
+<script>
+/*WORLD3D*/
+</script>
 <script>
 /*GAME*/
 </script>

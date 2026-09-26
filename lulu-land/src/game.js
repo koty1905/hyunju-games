@@ -1323,19 +1323,25 @@ function go(name, arg) {
 SC.title = {
   t: 0, confirm: 0,
   music() { return 'park'; },
-  enter() { this.t = 0; this.confirm = 0; },
-  update(dt) { this.t += dt; if (this.confirm > 0) this.confirm -= dt; },
+  view3d() { return 'title'; },
+  enter() { this.t = 0; this.confirm = 0; ensureNPCs(); },
+  update(dt) { this.t += dt; if (this.confirm > 0) this.confirm -= dt; updateNPCs(dt); },
   draw() {
-    world(Math.round(40 + Math.sin(this.t * .15) * 40));
+    const three = is3D('title');
+    const blink = (this.t % 3.4) < .12;
+    const face = lulu(G.eq, 'idle', Math.floor(this.t * 2) % 2, blink ? 'blink/smile' : 'happy/open');
+    if (three) W3.park({ x: 450, lulu: face, npcs: npcs3D() });
+    else world(Math.round(40 + Math.sin(this.t * .15) * 40));
     const bobY = Math.round(Math.sin(this.t * 2) * 2);
     text('룰루랜드', W / 2, 16 + bobY, { f: F.xl, c: '#ff8fb3', o: C.ink, ow: 2, a: 'center' });
     text('탕후루 먹방 테마파크', W / 2, 48, { f: F.m, c: '#ffffff', o: C.ink, a: 'center' });
-    for (let i = 0; i < 4; i++) {
-      const a = this.t * .8 + i * Math.PI / 2;
-      blit(TANG, W / 2 - 5 + Math.cos(a) * 60, 92 + Math.sin(a) * 14 - 16);
+    if (!three) {
+      for (let i = 0; i < 4; i++) {
+        const a = this.t * .8 + i * Math.PI / 2;
+        blit(TANG, W / 2 - 5 + Math.cos(a) * 60, 92 + Math.sin(a) * 14 - 16);
+      }
+      blit(face, W / 2 - 20, 84, 2);
     }
-    const blink = (this.t % 3.4) < .12;
-    blit(lulu(G.eq, 'idle', Math.floor(this.t * 2) % 2, blink ? 'blink/smile' : 'happy/open'), W / 2 - 20, 84, 2);
     button('start', 116, 149, 88, 18, hasSave ? '이어하기' : '시작하기', () => { jingle('start'); go('park'); if (!hasSave) { hasSave = true; save(); } }, { key: 'Enter', f: F.l });
     soundToggles(W - 40, 4);
     if (!AU.ac) text('화면을 누르면 소리가 나요', W - 44, 6, { f: F.s, c: '#ffffff', o: C.ink, a: 'right' });
@@ -1343,7 +1349,7 @@ SC.title = {
       if (this.confirm > 0) { G = DEF(); save(); hasSave = false; this.confirm = 0; toast('기록을 지웠어요'); }
       else this.confirm = 3;
     }, { f: F.s, col: C.lav, dark: C.lavD });
-    text('팬 창작 게임 · 콘셉트: 탕후루의 달인', W - 4, 170, { f: F.s, c: C.ink2, a: 'right' });
+    text('팬 창작 게임 · 콘셉트: 탕후루의 달인', W - 4, 170, { f: F.s, c: C.ink2, o: '#fff3f7', a: 'right' });
   },
 };
 
@@ -1362,7 +1368,7 @@ function mkNPC() {
     H: pick(['#6b4f3a', '#3b2a4a', '#f2c14e', '#e07a5f', '#9b7fd1', '#2f2f2f']), S: pick(['#ffe0cc', '#f1c7a5', '#d9a27c']),
     c: pick(['#7ec8e3', '#ffb4a2', '#b5e48c', '#cdb4db', '#ffd166', '#90dbf4']), p: pick(['#4a4e69', '#6d597a', '#355070']), E: C.ink,
   };
-  return { x: rnd(20, WORLD - 20), dir: Math.random() < .5 ? -1 : 1, sp: rnd(12, 24), t: rnd(0, 5), pause: 0, img: spr(NPC, pal), pal, bal: Math.random() < .45 ? pick(['#ff6f9c', '#ffd166', '#7ee0c3', '#a58bff']) : null };
+  return { lane: pick([-1.3, 1.9, 2.6]), fr: [], x: rnd(20, WORLD - 20), dir: Math.random() < .5 ? -1 : 1, sp: rnd(12, 24), t: rnd(0, 5), pause: 0, img: spr(NPC, pal), pal, bal: Math.random() < .45 ? pick(['#ff6f9c', '#ffd166', '#7ee0c3', '#a58bff']) : null };
 }
 function lamp(x) {
   for (let y = 64; y < GROUND; y++) rect(x - 1, y, 3, 1, ((y >> 2) % 2) ? '#ff8fb3' : '#ffffff');
@@ -1464,6 +1470,32 @@ function fountain(x) {
     rect(x + 30 + s * a * 18, 122 - Math.sin(a * Math.PI) * 14 + a * 16, 1, 2, '#e6f6ff');
   }
 }
+const NPCS = [];
+function ensureNPCs() { while (NPCS.length < 7) NPCS.push(mkNPC()); }
+function updateNPCs(dt) {
+  for (const n of NPCS) {
+    n.t += dt;
+    if (n.pause > 0) { n.pause -= dt; continue; }
+    n.x += n.dir * n.sp * dt;
+    if (n.x < 10 || n.x > WORLD - 10) n.dir *= -1;
+    if (Math.random() < dt * .08) n.pause = rnd(1, 3);
+  }
+}
+// 3D용 손님 그림: 몸통 스프라이트에 다리를 붙인 두 동작 (고해상도)
+function npcFrame(n, f) {
+  if (!n.fr[f]) {
+    const c = mk(16, 30), g = c.getContext('2d');
+    g.drawImage(n.img, 0, 0);
+    const lh = f ? [4, 6] : [6, 4];
+    g.fillStyle = n.pal.p; g.fillRect(4, 24, 4, lh[0]); g.fillRect(8, 24, 4, lh[1]);
+    g.fillStyle = C.ink; g.fillRect(4, 22 + lh[0], 4, 2); g.fillRect(8, 22 + lh[1], 4, 2);
+    c.hd = true; n.fr[f] = c;
+  }
+  return n.fr[f];
+}
+function npcs3D() {
+  return NPCS.map(n => ({ x: n.x, lane: n.lane, flip: n.dir < 0, bal: n.bal, canvas: npcFrame(n, n.pause > 0 ? 0 : Math.floor(n.t * 6) % 2) }));
+}
 function drawNPC(n, sx) {
   const f = Math.floor(n.t * 6) % 2, moving = n.pause <= 0;
   const y = GROUND - 15;
@@ -1473,13 +1505,14 @@ function drawNPC(n, sx) {
   rect(sx + 2, y + 12, 2, lh, n.pal.p); rect(sx + 4, y + 12, 2, rh, n.pal.p);
 }
 SC.park = {
-  x: 133, tx: null, want: null, cam: 0, walkT: 0, moving: false, npcs: [], birdT: 2,
+  x: 133, tx: null, want: null, cam: 0, walkT: 0, moving: false, npcs: NPCS, birdT: 2,
   music() { return 'park'; },
+  view3d() { return 'park'; },
   enter(from) {
     const b = BOOTHS.find(b => b.scene === from);
     if (b) this.x = b.door;
     this.tx = null; this.want = null;
-    if (!this.npcs.length) for (let i = 0; i < 7; i++) this.npcs.push(mkNPC());
+    ensureNPCs();
     this.cam = clamp(Math.round(this.x - W / 2), 0, WORLD - W);
   },
   near() { return BOOTHS.find(b => Math.abs(this.x - b.door) < 20); },
@@ -1504,25 +1537,39 @@ SC.park = {
     if (this.birdT <= 0) { this.birdT = rnd(3, 8); sfx.bird(); }
     const wl = loop('water');
     if (wl) wl.set(Math.max(0, 1 - Math.abs(this.x - 830) / 220) * .12);
-    for (const n of this.npcs) {
-      n.t += dt;
-      if (n.pause > 0) { n.pause -= dt; continue; }
-      n.x += n.dir * n.sp * dt;
-      if (n.x < 10 || n.x > WORLD - 10) n.dir *= -1;
-      if (Math.random() < dt * .08) n.pause = rnd(1, 3);
-    }
+    updateNPCs(dt);
   },
   key(k) {
     if (k === 'ArrowUp' || k === 'w' || k === 'Enter' || k === ' ') { const b = this.near(); if (b) go(b.scene); }
   },
   down(x, y) {
     if (y < 16) return;
+    if (is3D('park')) {
+      const h = W3.pick(x, y); if (!h) return;
+      const b = h.booth && BOOTHS.find(b => b.id === h.booth);
+      if (b) { this.tx = b.door; this.want = b; } else if (h.wx != null) { this.tx = clamp(h.wx, 12, WORLD - 12); this.want = null; }
+      return;
+    }
     const wx = x + this.cam;
     const b = BOOTHS.find(b => wx >= b.x && wx <= b.x + b.w && y >= 40 && y <= GROUND);
     if (b) { this.tx = b.door; this.want = b; }
     else { this.tx = clamp(wx, 12, WORLD - 12); this.want = null; }
   },
   draw() {
+    const fr0 = this.moving ? Math.floor(this.walkT * 8) % 4 : Math.floor(T * 2) % 2;
+    const img = lulu(G.eq, this.moving ? 'walk' : 'idle', fr0, (T % 3.2) < .12 ? 'blink/smile' : 'n/smile');
+    if (is3D('park')) {
+      W3.park({ x: this.x, lulu: img, npcs: npcs3D() });
+      const nb = this.near();
+      if (nb) {
+        const p = W3.projectPark(this.x, 2.75), label = '↑ ' + nb.name;
+        const w = Math.ceil(tw(label, F.s)) + 10, px = clamp(p.x - w / 2, 2, W - w - 2);
+        panel(px, p.y - 14, w, 13, '#ffffff'); text(label, px + 5, p.y - 12, { f: F.s, c: C.ink });
+        button('enter', 250, 160, 66, 16, '들어가기', () => go(nb.scene), { f: F.m });
+      }
+      text('←→ 이동 · ↑ 들어가기 · 가게를 눌러도 가요', 6, 166, { f: F.s, c: '#ffffff', o: C.ink });
+      return;
+    }
     const cam = this.cam;
     world(cam);
     for (let i = 0; i < LAMPS.length - 1; i++) { const a = LAMPS[i] - cam, b = LAMPS[i + 1] - cam; if (b > -10 && a < W + 10) bunting(a, b); }
@@ -1621,14 +1668,25 @@ function counter(counterY) {
   ctx.fillStyle = '#e87ea0'; for (let x = 20; x < W; x += 40) ctx.fillRect(x, counterY + 8, 1, H);
 }
 function stick(x0, y0, x1, y1) {
+  if (is3D('kitchen')) { W3.stick(x0, y0, x1, y1); return; }
   if (y0 === y1) { rect(x0, y0 - 1, x1 - x0, 2, '#e0b27a'); rect(x0, y0 + 1, x1 - x0, 1, '#b98550'); rect(x0 - 3, y0, 3, 1, '#e0b27a'); }
   else { rect(x0 - 1, y0, 2, y1 - y0, '#e0b27a'); rect(x0 + 1, y0, 1, y1 - y0, '#b98550'); rect(x0, y0 - 3, 1, 3, '#e0b27a'); }
 }
 function pieceImg(id) { return K.coated && K.q ? coated(id, K.q) : ING_BY[id].img; }
+// 3D 무대가 켜져 있으면 같은 2D 배치를 3D 모형으로 넘기고, 아니면 픽셀 그림을 그린다
+const is3D = v => !!(window.W3 && W3.ok && W3.view === v);
+function kPiece(id, cx, cy, size, q) {
+  if (is3D('kitchen')) W3.piece(id, cx, cy, size, q || null);
+  else blit(q ? coated(id, q) : ING_BY[id].img, cx - size / 2, cy - size / 2, size / 10);
+}
+function kSprite(img, x, y, k, z) {
+  if (is3D('kitchen')) W3.sprite(img, x, y, img.width * k / 2, img.height * k / 2, z);
+  else blit(img, x, y, k);
+}
 function kitchenLulu(x, y, k) {
   const blink = (T % 3) < .12;
   let face = K.faceT > 0 ? K.face : (blink ? 'blink/smile' : 'n/smile');
-  blit(lulu(G.eq, 'idle', Math.floor(T * 2) % 2, face), x, y, k);
+  kSprite(lulu(G.eq, 'idle', Math.floor(T * 2) % 2, face), x, y, k, -.7);
 }
 function addPiece(i) {
   const ing = ING[i];
@@ -1675,6 +1733,7 @@ function finishEat() {
   if (full) chat('주문 그대로다!! 최고', K.nick);
 }
 SC.kitchen = {
+  view3d() { return 'kitchen'; },
   music() { return K.phase === 'syrup' || K.phase === 'dip' ? 'cook' : 'shop'; },
   enter() {
     K.phase = 'build'; K.sk = []; K.q = null; K.coated = false; K.res = null; K.faceT = 0;
@@ -1744,9 +1803,10 @@ SC.kitchen = {
     else this.drawEat();
   },
   drawBuild() {
-    kitchenBG(null);
+    const three = is3D('kitchen');
+    if (three) W3.kitchen(96); else kitchenBG(null);
     kitchenLulu(258, 38, 2);
-    counter(96);
+    if (!three) counter(96);
     drawChat(4, 20, 100, 74);
     // 주문 말풍선
     panel(110, 20, 140, 32, '#fff7f0');
@@ -1758,14 +1818,14 @@ SC.kitchen = {
     });
     text('순서대로!', 245, 38, { f: F.s, c: C.pinkD, a: 'right' });
     // 꼬치
-    rect(106, 90, 150, 6, '#e8b184'); rect(106, 90, 150, 1, C.ink);
+    if (three) W3.board(106, 93, 150); else { rect(106, 90, 150, 6, '#e8b184'); rect(106, 90, 150, 1, C.ink); }
     stick(111, 80, 252, 80);
     for (let i = 0; i < 5; i++) {
       const cx = 124 + i * 24;
-      if (K.sk[i]) blit(ING_BY[K.sk[i]].img, cx - 10, 70, 2);
+      if (K.sk[i]) kPiece(K.sk[i], cx, 80, 20);
       else { ctx.fillStyle = 'rgba(59,31,58,0.28)'; for (let a = 0; a < 12; a++) ctx.fillRect(Math.round(cx + Math.cos(a / 12 * Math.PI * 2) * 7), Math.round(80 + Math.sin(a / 12 * Math.PI * 2) * 7), 1, 1); }
     }
-    blit(CAT, 300, 88);
+    kSprite(CAT, 300, 88, 1, .5);
     if (Math.floor(T) % 3 === 0) text('z', 306 + (T % 1) * 4, 80 - (T % 1) * 6, { f: F.s, c: C.ink2 });
     // 재료 쟁반
     ING.forEach((ing, i) => {
@@ -1788,14 +1848,17 @@ SC.kitchen = {
     text('주문 순서대로 꽂고 설탕 코팅을 하면 룰루가 먹방을 해요', W / 2, 166, { f: F.s, c: '#ffffff', a: 'center' });
   },
   drawSyrup() {
-    kitchenBG(170, false);
-    drawChat(4, 20, 100, 102);
+    const three = is3D('kitchen');
     const cx = 175, sy = 118;
     const tcol = gradCol(['#fff4d6', '#ffe08a', '#ffc04d', '#e8892c', '#8a4a1c'], (K.temp - 100) / 90);
-    // 냄비 뒤
-    ellipse(cx, sy, 47, 8, '#7c82a0');
-    ellipse(cx, sy, 43, 6, tcol);
-    for (let i = 0; i < 5; i++) { const bx = cx - 30 + ((i * 17 + Math.floor(T * 7) * 5) % 60); rect(bx, sy - 2 + (i % 3), 2, 1, '#ffffff'); }
+    if (three) { W3.kitchen(170); W3.pot(cx, sy, tcol, clamp((K.temp - 100) / 90, 0, 1)); }
+    else {
+      kitchenBG(170, false);
+      // 냄비 뒤
+      ellipse(cx, sy, 47, 8, '#7c82a0');
+      ellipse(cx, sy, 43, 6, tcol);
+      for (let i = 0; i < 5; i++) { const bx = cx - 30 + ((i * 17 + Math.floor(T * 7) * 5) % 60); rect(bx, sy - 2 + (i % 3), 2, 1, '#ffffff'); }
+    }
     // 꼬치
     let dy = 0;
     if (K.phase === 'dip') {
@@ -1804,8 +1867,12 @@ SC.kitchen = {
     }
     const tipY = 100 + Math.round(dy), n = K.sk.length;
     stick(cx, tipY - 12 - (n - 1) * 18 - 14, cx, tipY + 10);
-    for (let i = 0; i < n; i++) blit(pieceImg(K.sk[i]), cx - 10, tipY - 10 - i * 18, 2);
-    // 앞쪽 시럽과 냄비
+    for (let i = 0; i < n; i++) kPiece(K.sk[i], cx, tipY - i * 18, 20, K.coated ? K.q : null);
+    if (!three) this.drawPotFront(cx, sy, tcol);
+    drawChat(4, 20, 100, 102);
+    this.drawSyrupUI(cx, 262, 22, 150);
+  },
+  drawPotFront(cx, sy, tcol) {
     ctx.globalAlpha = .7; ellipse(cx, sy, 43, 6, tcol, 1); ctx.globalAlpha = 1;
     rect(cx - 46, sy + 1, 93, 42, '#b8bdd6'); rect(cx - 46, sy + 1, 1, 42, C.ink); rect(cx + 46, sy + 1, 1, 42, C.ink);
     rect(cx - 46, sy + 43, 93, 1, C.ink); rect(cx - 40, sy + 4, 4, 36, '#e3e6f5'); rect(cx + 30, sy + 4, 8, 36, '#9aa0bb');
@@ -1817,8 +1884,8 @@ SC.kitchen = {
       rect(fx, sy + 46 - fh, 4, fh, '#ff8a3d'); rect(fx + 1, sy + 47 - fh + 1, 2, fh - 2, '#ffd166');
     }
     rect(cx - 50, sy + 46, 101, 2, C.ink2);
-    // 온도계
-    const x = 262, y0 = 22, y1 = 150;
+  },
+  drawSyrupUI(cx, x, y0, y1) {
     const ty = t => Math.round(y1 - 10 - (t - 100) * (y1 - 10 - y0 - 4) / 100);
     panel(x, y0, 11, y1 - y0 - 6, '#ffffff');
     rect(x + 2, ty(170), 7, ty(160) - ty(170), '#ffe9a8');
@@ -1845,7 +1912,8 @@ SC.kitchen = {
     }
   },
   drawEat() {
-    kitchenBG(null);
+    const three = is3D('kitchen');
+    if (three) W3.kitchen(108); else kitchenBG(null);
     let face = 'n/smile';
     const n = K.sk.length, t = K.t;
     const eating = K.eatI < n;
@@ -1854,8 +1922,8 @@ SC.kitchen = {
       else if (t >= .38 && t < .95) face = (Math.floor(t * 10) % 2 ? 'happy/chew0' : 'happy/chew1');
     } else face = 'happy/open';
     if (K.spicy > 0) face = 'x/wave/red';
-    blit(lulu(G.eq, 'idle', Math.floor(T * 2) % 2, face), 192, 26, 3);
-    counter(108);
+    kSprite(lulu(G.eq, 'idle', Math.floor(T * 2) % 2, face), 192, 26, 3, -.7);
+    if (!three) counter(108);
     drawChat(4, 20, 100, 104);
     if (K.phase === 'eat' || K.phase === 'result') {
       // 꼬치
@@ -1868,7 +1936,7 @@ SC.kitchen = {
       const first = K.eatI + (K.bit ? 1 : 0);
       if (first < n || eating) {
         stick(sx, topY - 12, sx, H);
-        for (let i = first; i < n; i++) blit(pieceImg(K.sk[i]), sx - 10, topY - 10 + (i - first) * 18, 2);
+        for (let i = first; i < n; i++) kPiece(K.sk[i], sx, topY + (i - first) * 18, 20, K.coated ? K.q : null);
       }
     }
     rect(260, 20, 56, 13, 'rgba(43,24,56,0.82)');
@@ -2320,9 +2388,13 @@ function update(dt) {
   if (toastT > 0) toastT -= dt;
 }
 function render() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, cv.width, cv.height);
   ctx.setTransform(S, 0, 0, S, 0, 0);
   ctx.imageSmoothingEnabled = false;
   ui.btns = [];
+  const w3 = window.W3 && W3.ok;
+  if (w3) W3.begin(scene.view3d ? scene.view3d() : null);
   scene.draw();
   drawP();
   if (scene !== SC.title) hud();
@@ -2333,6 +2405,7 @@ function render() {
     ctx.globalAlpha = 1;
   }
   if (fade > 0) { ctx.fillStyle = 'rgba(43,24,56,' + fade.toFixed(3) + ')'; ctx.fillRect(0, 0, W, H); }
+  if (w3) W3.end();
 }
 let last = 0;
 function frame(now) {
@@ -2342,6 +2415,8 @@ function frame(now) {
 }
 
 function boot() {
+  const world3d = document.getElementById('world');
+  if (window.W3 && world3d && !new URLSearchParams(location.search).has('2d')) W3.init(world3d);
   scene = SC.title; scene.enter();
   requestAnimationFrame(frame);
 }

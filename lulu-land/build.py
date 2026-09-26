@@ -6,8 +6,8 @@
     python3 build.py            # 글꼴이 없으면 npm에서 galmuri 패키지를 받아 온다
 
 결과:
-    index.html     – 바로 열 수 있는 완성본 (<!doctype html> 포함)
-    dist/page.html – 머리말 없이 본문만 있는 판 (Claude Artifact 게시용)
+    index.html     – 바로 열 수 있는 완성본 (<!doctype html> 포함, three.js까지 넣어 인터넷 없이도 3D로 돈다)
+    dist/page.html – 머리말 없이 본문만 있는 판 (Claude Artifact 게시용, three.js는 cdnjs에서 불러온다)
 """
 import base64, io, os, subprocess, sys, tarfile, tempfile, urllib.request, json
 
@@ -36,6 +36,22 @@ def ensure_fonts():
                 out.write(t.extractfile(m).read())
 
 
+THREE_VER = '0.128.0'
+THREE_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+
+
+def ensure_three():
+    path = os.path.join(CACHE, 'three-%s.min.js' % THREE_VER)
+    if not os.path.exists(path):
+        os.makedirs(CACHE, exist_ok=True)
+        meta = json.load(urllib.request.urlopen('https://registry.npmjs.org/three/' + THREE_VER))
+        data = urllib.request.urlopen(meta['dist']['tarball']).read()
+        with tarfile.open(fileobj=io.BytesIO(data)) as t:
+            with open(path, 'wb') as out:
+                out.write(t.extractfile('package/build/three.min.js').read())
+    return open(path, encoding='utf-8').read()
+
+
 def subset(path, chars):
     from fontTools import subset as fs
     opts = fs.Options()
@@ -54,7 +70,9 @@ def main():
     ensure_fonts()
     page = open(os.path.join(SRC, 'page.html'), encoding='utf-8').read()
     game = open(os.path.join(SRC, 'game.js'), encoding='utf-8').read()
-    chars = set(page + game)
+    world = open(os.path.join(SRC, 'world3d.js'), encoding='utf-8').read()
+    three = ensure_three()
+    chars = set(page + game + world)
     chars |= set(chr(c) for c in range(0x20, 0x7f))
     chars = ''.join(sorted(c for c in chars if c >= ' '))
     css = []
@@ -65,13 +83,15 @@ def main():
         b64 = base64.b64encode(woff).decode()
         css.append("@font-face{font-family:'%s';font-weight:%d;font-display:block;"
                    "src:url(data:font/woff2;base64,%s) format('woff2');}" % (fam, wt, b64))
-    body = page.replace('/*FONTFACE*/', '\n'.join(css)).replace('/*GAME*/', game)
+    body = page.replace('/*FONTFACE*/', '\n'.join(css)).replace('/*WORLD3D*/', world).replace('/*GAME*/', game)
+    art = body.replace('/*THREE*/', '<script src="%s"></script>' % THREE_CDN)
+    full_body = body.replace('/*THREE*/', '<script>\n' + three.replace('</script', '<\\/script') + '\n</script>')
     os.makedirs(os.path.join(HERE, 'dist'), exist_ok=True)
     with open(os.path.join(HERE, 'dist', 'page.html'), 'w', encoding='utf-8') as fp:
-        fp.write(body)
+        fp.write(art)
     full = ('<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">\n'
             '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
-            + body.replace('<div class="wrap">', '</head>\n<body>\n<div class="wrap">', 1)
+            + full_body.replace('<div class="wrap">', '</head>\n<body>\n<div class="wrap">', 1)
             + '</body>\n</html>\n')
     with open(os.path.join(HERE, 'index.html'), 'w', encoding='utf-8') as fp:
         fp.write(full)
