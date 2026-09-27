@@ -1,6 +1,6 @@
-// ---------- 러바오 (앉은 앞모습 160x138 격자 = 80x69칸, 몸 가운데 x=64)
-// 사진의 특징: 둥글고 볼이 통통한 흰 얼굴, 아래 바깥으로 처진 검은 눈 패치, 까만 동그란 귀, 넓은 까만 코,
-// 태연한 표정, 가슴과 어깨를 두르는 검은 띠, 검은 팔다리. 턱 아래 털은 살짝 베이지.
+// ---------- 러바오 (선 앞모습 160x150 격자 = 80x75칸, 몸 가운데 x=64). 참조: 러바오 사진과 스프라이트 시트
+// 두 발로 서서 까만 팔을 몸 앞으로 늘어뜨린 모습. 둥글고 볼이 통통한 흰 얼굴, 아래 바깥으로 처진 타원 눈 패치,
+// 까만 동그란 귀, 까만 코, 태연한 표정, 크고 둥근 흰 배, 팔로 이어지는 까만 어깨, 짧은 까만 다리. 턱 아래 털은 살짝 베이지.
 const PB = { w: '#f6f2ea', w2: '#e9dfcd', k: '#221e24', k2: '#3a343f', ol: '#17141a', eye: '#6a4630', nose: '#141116', pad: '#4f4852', mouth: '#9a8d84', tongue: '#ec8c9a', lid: '#6d6570' };
 function bamboo(g, x0, y0, x1, y1) {
   gline(g, x0, y0, x1, y1, '#6fae3f', 4);
@@ -10,56 +10,78 @@ function bamboo(g, x0, y0, x1, y1) {
   gaxis(g, x1 + ux * 3 - uy * 4, y1 + uy * 3 + ux * 4, 2.4, 6, ux - uy, uy + ux, '#9ccf5e');
   gaxis(g, x1 + ux * 3 + uy * 4, y1 + uy * 3 - ux * 4, 2.4, 6, ux + uy, uy - ux, '#8cc453');
 }
+// arm: idle 팔 늘어뜨림 · hold 두 앞발로 대나무 · chest 두 앞발 모으기(기다리기) · cross 팔짱(검토)
+//      wave 손 흔들기 · up 두 팔 번쩍(점프) · offer 대나무 내밀기 / down: 고개 숙이기(실패)
 function lebao(o = {}) {
-  const arm = o.arm || 'hold', chew = o.chew ? 1 : 0, blink = o.blink ? 1 : 0, bam = o.bam == null ? 3 : o.bam, paper = o.paper || 0;
-  return spr(`lb|${arm}|${chew}|${blink}|${bam}|${paper}`, 160, 138, g => {
-    const W1 = PB.w, K = PB.k;
-    // 몸통: 흰 배 위로 어깨를 두르는 검은 띠
-    gell(g, 64, 100, 42, 34, W1);
-    gell(g, 64, 80, 46, 15, K);
-    gell(g, 64, 110, 35, 22, W1);
-    // 대나무 (앞발 사이로 입까지)
-    if (arm === 'hold' && bam) bamboo(g, 64, 110, 64, 110 - [0, 16, 28, 40][bam]);
+  const arm = o.arm || 'idle', chew = o.chew ? 1 : 0, blink = o.blink ? 1 : 0, bam = o.bam == null ? 3 : o.bam, paper = o.paper || 0, down = o.down ? 1 : 0;
+  return spr(`lb|${arm}|${chew}|${blink}|${bam}|${paper}|${down}`, 160, 150, g => {
+    const W1 = PB.w, K = PB.k, hy = 42 + down * 5;
+    // 짧은 까만 다리와 발
+    for (const s of [-1, 1]) { gell(g, 64 + s * 17, 138, 14, 11, K); gell(g, 64 + s * 19, 146, 12, 3.5, K); }
+    // 까만 어깨 (팔로 이어진다)
+    gell(g, 64, 76, 44, 16, K);
+    // 크고 둥근 흰 배
+    gell(g, 64, 106, 35, 36, W1);
+    gell(g, 64, 100, 28, 30, W1);
     // 팔
-    const paw = (x, y) => gell(g, x, y, 7.5, 7, K);
-    const L = () => { gaxis(g, 43, 88, 9, 16, 26, 16, K); paw(55, 96); };
-    const Rr = () => { gaxis(g, 85, 88, 9, 16, -26, 16, K); paw(73, 96); };
-    if (arm === 'hold') { L(); Rr(); }
-    else if (arm === 'wave') { L(); gaxis(g, 103, 64, 8.5, 17, 10, -30, K); paw(108, 47); }
-    else if (arm === 'offer') { L(); gaxis(g, 114, 82, 8, 17, 32, 4, K); paw(131, 84); bamboo(g, 132, 84, 158, 80); }
-    else { gaxis(g, 40, 98, 9, 15, 8, 20, K); gaxis(g, 88, 98, 9, 15, -8, 20, K); }
-    // 앞으로 내민 뒷발과 발바닥
-    for (const s of [-1, 1]) {
-      const x = 64 + s * 27;
-      gell(g, x, 124, 19, 12.5, K);
-      gell(g, x, 127, 10, 6.5, PB.pad);
-      for (let i = -1; i <= 1; i++) gell(g, x + i * 6.5, 117.5, 2.6, 2.2, PB.pad);
-    }
-    // 머리: 까만 귀, 둥글고 통통한 얼굴
-    for (const s of [-1, 1]) gell(g, 64 + s * 33, 18, 12, 11, K);
-    gell(g, 64, 44, 38, 31, W1);
-    for (const s of [-1, 1]) gell(g, 64 + s * 20, 57, 21, 16, W1);
-    for (const x of [48, 56, 71, 79]) { let ty = 0; while (ty < g.h && !gget(g, x, ty)) ty++; gline(g, x, ty, x + (x < 64 ? -1 : 1), ty - 2, W1); }
-    if (paper) { const w = paper * 5; grect(g, 64 - w, 64, w * 2, 9, '#ffffff'); for (let i = 0; i < paper; i++) grect(g, 64 - w + 2, 66 + i * 2, w * 2 - 4, 1, '#b8b0a4'); }
+    const paw = (x, y) => gell(g, x, y, 8, 7.5, K);
+    const hang = s => { gaxis(g, 64 + s * 30, 98, 9.5, 21, -s * 6, 30, K); paw(64 + s * 26, 118); };
+    const bent = s => { gaxis(g, 64 + s * 20, 86, 9, 15, -s * 22, 12, K); paw(64 + s * 7, 92); };
+    const raised = s => { gaxis(g, 64 + s * 40, 58, 8.5, 19, s * 12, -34, K); paw(64 + s * 45, 40); };
+    if (arm === 'idle') { hang(-1); hang(1); }
+    else if (arm === 'chest') { bent(-1); bent(1); }
+    else if (arm === 'hold') { if (bam) bamboo(g, 64, 104, 64, 104 - [0, 16, 28, 40][bam]); bent(-1); bent(1); }
+    else if (arm === 'cross') { gaxis(g, 64, 86, 9, 31, 1, .22, K); gaxis(g, 64, 94, 9, 31, 1, -.22, K); paw(35, 92); paw(93, 88); }
+    else if (arm === 'wave') { hang(-1); raised(1); }
+    else if (arm === 'up') { raised(-1); raised(1); }
+    else if (arm === 'offer') { hang(-1); gaxis(g, 112, 82, 8.5, 20, 34, 4, K); paw(132, 84); bamboo(g, 133, 84, 158, 80); }
+    // 머리: 까만 동그란 귀, 둥글고 통통한 얼굴
+    for (const s of [-1, 1]) gell(g, 64 + s * 31, hy - 26 + down * 2, 12, 11, K);
+    gell(g, 64, hy, 36, 30, W1);
+    for (const s of [-1, 1]) gell(g, 64 + s * 19, hy + 11, 19, 15, W1);
+    for (const x of [50, 57, 71, 78]) { let ty = 0; while (ty < g.h && !gget(g, x, ty)) ty++; gline(g, x, ty, x + (x < 64 ? -1 : 1), ty - 2, W1); }
+    if (paper) { const w = paper * 5; grect(g, 64 - w, hy + 20, w * 2, 9, '#ffffff'); for (let i = 0; i < paper; i++) grect(g, 64 - w + 2, hy + 22 + i * 2, w * 2 - 4, 1, '#b8b0a4'); }
     gout(g, PB.ol);
-    // 턱 아래와 볼 아랫부분은 연한 베이지 (사진처럼)
-    for (let y = 56; y < 80; y++) for (let x = 20; x < 110; x++) if (gget(g, x, y) === W1 && hash(x, y) % 5 < (y - 56) / 4) gset(g, x, y, PB.w2);
+    // 턱 아래와 가슴 위쪽은 연한 베이지 (사진처럼)
+    for (let y = hy + 12; y < hy + 40; y++) for (let x = 24; x < 104; x++) if (gget(g, x, y) === W1 && hash(x, y) % 5 < (y - hy - 12) / 5) gset(g, x, y, PB.w2);
     gtex(g, W1, '#ede7dc', null, 17);
     gtex(g, K, PB.k2, null, 29);
-    // 아래 바깥으로 처진 눈 패치
-    gaxis(g, 45, 46, 7.5, 12, -.55, 1, K); gaxis(g, 83, 46, 7.5, 12, .55, 1, K);
-    for (const x0 of [47, 78]) {
-      if (blink) { grect(g, x0 - 1, 42, 5, 1, PB.lid); }
-      else { grect(g, x0, 40, 3, 3, PB.eye); gset(g, x0 + 1, 41, '#1a0f08'); gset(g, x0 + 1, 42, '#1a0f08'); gset(g, x0, 40, '#ffffff'); }
+    // 아래 바깥으로 처진 타원 눈 패치
+    gaxis(g, 47, hy + 1, 7, 10.5, -.45, 1, K); gaxis(g, 81, hy + 1, 7, 10.5, .45, 1, K);
+    for (const x0 of [48, 77]) {
+      const ey = hy - 3 + down * 2;
+      if (blink) grect(g, x0 - 1, ey + 1, 5, 1, PB.lid);
+      else { grect(g, x0, ey, 3, 3, PB.eye); gset(g, x0 + 1, ey + 1, '#1a0f08'); gset(g, x0 + 1, ey + 2, '#1a0f08'); gset(g, x0, ey, '#ffffff'); }
     }
-    // 넓은 까만 코
-    const N = PB.nose;
-    grect(g, 58, 57, 12, 1, N); grect(g, 57, 58, 14, 1, N); grect(g, 58, 59, 12, 1, N); grect(g, 60, 60, 8, 1, N); grect(g, 62, 61, 4, 1, N);
-    gset(g, 60, 57, '#4a4550'); gset(g, 61, 57, '#4a4550');
-    grect(g, 63, 62, 2, 3, PB.mouth);
-    if (chew) { gell(g, 64, 67.5, 3.6, 2.6, PB.ol); gell(g, 64, 68, 2.3, 1.4, PB.tongue); }
-    else { for (const x of [59, 62, 63, 64, 65, 68]) gset(g, x, 65, PB.mouth); for (const x of [60, 61, 66, 67]) gset(g, x, 66, PB.mouth); }
-    grect(g, 37, 60, 4, 1, '#f1d3d1'); grect(g, 87, 60, 4, 1, '#f1d3d1');
+    // 까만 코와 작은 입
+    const N = PB.nose, ny = hy + 12;
+    grect(g, 59, ny, 10, 1, N); grect(g, 58, ny + 1, 12, 1, N); grect(g, 59, ny + 2, 10, 1, N); grect(g, 61, ny + 3, 6, 1, N); grect(g, 63, ny + 4, 2, 1, N);
+    gset(g, 61, ny, '#4a4550'); gset(g, 62, ny, '#4a4550');
+    grect(g, 63, ny + 5, 2, 2, PB.mouth);
+    if (chew) { gell(g, 64, ny + 9, 3.4, 2.4, PB.ol); gell(g, 64, ny + 9.4, 2.2, 1.3, PB.tongue); }
+    else if (down) { for (const x of [60, 61, 66, 67]) gset(g, x, ny + 8, PB.mouth); for (const x of [62, 63, 64, 65]) gset(g, x, ny + 7, PB.mouth); }
+    else { for (const x of [60, 63, 64, 67]) gset(g, x, ny + 7, PB.mouth); for (const x of [61, 62, 65, 66]) gset(g, x, ny + 8, PB.mouth); }
+    grect(g, 38, hy + 14, 4, 1, '#f1d3d1'); grect(g, 86, hy + 14, 4, 1, '#f1d3d1');
+  });
+}
+// 옆모습 달리기 (176x110 격자 = 88x55칸, 오른쪽을 본다, 4프레임): 흰 몸, 어깨의 까만 띠, 까만 네 다리
+function lebaoRun(f) {
+  return spr('lbrun' + f, 176, 110, g => {
+    const W1 = PB.w, K = PB.k, a = [0, 1, 0, -1][f], bob = f % 2 ? -2 : 0;
+    const leg = (x, sw, c) => { gaxis(g, x + sw * 5, 88, 8, 16, sw * 8, 30, c); gell(g, x + sw * 10, 102, 10, 5.5, c); };
+    leg(56, -a, PB.k2); leg(116, a, PB.k2);
+    gell(g, 82, 66 + bob, 50, 30, W1);
+    gell(g, 112, 64 + bob, 17, 31, K);
+    leg(64, a, K); leg(124, -a, K);
+    gell(g, 128, 22 + bob, 10, 9.5, K);
+    gell(g, 140, 44 + bob, 27, 24, W1); gell(g, 156, 54 + bob, 13, 11, W1);
+    gout(g, PB.ol);
+    gtex(g, W1, '#ede7dc', null, 17); gtex(g, K, PB.k2, null, 29);
+    for (let y = 52; y < 72; y++) for (let x = 118; x < 170; x++) if (gget(g, x, y + bob) === W1 && hash(x, y) % 4 < (y - 51) / 5) gset(g, x, y + bob, PB.w2);
+    gaxis(g, 148, 42 + bob, 6.5, 9, .3, 1, K);
+    grect(g, 148, 38 + bob, 3, 3, PB.eye); gset(g, 149, 39 + bob, '#1a0f08'); gset(g, 148, 38 + bob, '#ffffff');
+    grect(g, 163, 50 + bob, 5, 1, PB.nose); grect(g, 162, 51 + bob, 6, 2, PB.nose); grect(g, 163, 53 + bob, 4, 1, PB.nose);
+    grect(g, 162, 57 + bob, 3, 1, PB.mouth);
   });
 }
 // 누워서 낮잠 자는 러바오 (184x84 격자 = 92x42칸, 머리가 오른쪽)
@@ -130,11 +152,11 @@ const loaf = () => spr('loaf', 22, 14, g => { gell(g, 11, 8, 10, 6, '#c9803a'); 
 const bamSpr = () => spr('bamspr', 44, 16, g => { bamboo(g, 2, 8, 34, 8); gout(g, P.ink); });
 // 나무 상자: open 0이면 닫힘, 1이면 앞판이 바닥으로 넘어감
 function crateBack(cx, bot) {
-  box(cx - 45, bot - 78, 90, 78, '#b98a55', P.woodD);
-  R(cx - 41, bot - 74, 82, 72, '#4a3322'); R(cx - 41, bot - 74, 82, 4, '#3a271a');
+  box(cx - 45, bot - 84, 90, 84, '#b98a55', P.woodD);
+  R(cx - 41, bot - 80, 82, 78, '#4a3322'); R(cx - 41, bot - 80, 82, 4, '#3a271a');
 }
 function crateFront(cx, bot, open, t = 0) {
-  const h = Math.round(78 * (1 - open));
+  const h = Math.round(84 * (1 - open));
   if (h > 2) {
     const y = bot - h;
     box(cx - 45, y, 90, h, '#c99a62', P.woodD);
@@ -210,7 +232,10 @@ function drawR(kind, x, fy, o = {}) {
 }
 function drawLB(x, fy, o = {}) {
   const chew = o.chew ? Math.floor(T * 5) % 2 : 0, blink = ((T * .5) % 4) < .12;
-  blit(lebao({ arm: o.arm, chew, blink: o.blink != null ? o.blink : blink, bam: o.bam, paper: o.paper }), x - 32, fy - 69);
+  if (o.run) { blit(lebaoRun(Math.floor(T * 10) % 4), x - 44, fy - 55, o.face < 0); return; }
+  const bob = o.arm === 'up' ? -Math.abs(Math.sin(T * 7)) * 6 : 0;
+  // 몸 가운데가 격자 x=64(80칸 중 32칸)이므로, 좌우를 뒤집으면 가운데가 48칸으로 옮겨 간다
+  blit(lebao({ arm: o.arm, chew, blink: o.blink != null ? o.blink : blink, bam: o.bam, paper: o.paper, down: o.down }), x - (o.flip ? 48 : 32), fy - 75 + bob, o.flip);
 }
 function drawGF(x, fy, o = {}) {
   const f = o.walk ? Math.floor(T * 6) % 4 : 0;
@@ -285,7 +310,7 @@ const SCENES = [
       room('day');
       const cx = 210, open = ez(k01(t, 1.6, 2.4)), shake = on(t, .8, 1.4) ? Math.sin(t * 60) * 1.5 : 0;
       crateBack(cx + shake, FY);
-      if (open > 0) drawLB(cx, FY - 3, { chew: true, bam: t > 6 ? 2 : 3 });
+      if (open > 0) drawLB(cx, FY - 3, { chew: true, bam: t > 6 ? 2 : 3, arm: on(t, 5, 6.3) ? 'wave' : 'hold' });
       crateFront(cx + shake, FY, open);
       if (t > 2.4) sparkles(cx, FY - 40, 44);
       const ids = ['alps', 'sister', 'seraphina', 'rosemarira', 'rosie', 'clerk2'];
@@ -304,7 +329,7 @@ const SCENES = [
       const cx = 210;
       crateBack(cx, FY);
       const eating = on(t, 3.9, 6.4), paper = eating ? 3 - Math.floor(k01(t, 3.9, 6.4) * 3) : 0;
-      drawLB(cx, FY - 3, { chew: eating || t > 6.4, bam: t < 3.6 ? 2 : 0, arm: t < 3.6 ? 'hold' : 'rest', paper });
+      drawLB(cx, FY - 3, { chew: eating || t > 6.4, bam: 0, arm: t < 3.6 ? 'cross' : eating ? 'chest' : 'idle', paper });
       crateFront(cx, FY, 1);
       const x2 = lerp(120, 158, ez(k01(t, 0, 1.4)));
       drawR('clerk2', x2, FY + 2, { walk: t < 1.4, face: 1, arm: t < 3.8 ? 'u' : 'd', mood: t > 6.4 ? 'n' : 'n' });
@@ -319,7 +344,7 @@ const SCENES = [
     draw(t) {
       room('day'); wallSign(210, 16, 1);
       const cx = 220;
-      crateBack(cx, FY); drawLB(cx, FY - 3, { chew: true, bam: 2 }); crateFront(cx, FY, 1);
+      crateBack(cx, FY); drawLB(cx, FY - 3, { chew: true, bam: 2, arm: 'hold' }); crateFront(cx, FY, 1);
       drawR('alps', 168, FY + 2, { face: 1, arm: 'u', mood: t > 3 && t < 5.5 ? 'n' : 'h' });
       const len = 52 * ez(k01(t, .4, 2.6));
       for (let x = 0; x < len; x += 4) R(176 + x, FY - 28 + Math.sin((x / 52) * 3.14) * 5, 3, 2, x % 8 ? P.gold : P.goldD);
@@ -336,7 +361,7 @@ const SCENES = [
       room('day');
       const lie = t > 6;
       const peel = Math.min(4, Math.floor((t - .2) / 1.2)), eat = Math.min(4, Math.floor((t - .6) / 1.2));
-      if (!lie) drawLB(220, FY - 3, { chew: true, bam: (t % 1.2) < .5 ? 3 : 0, arm: (t % 1.2) < .5 ? 'hold' : 'rest' });
+      if (!lie) drawLB(220, FY - 3, { chew: true, bam: 3, arm: (t % 1.2) < .5 ? 'hold' : 'chest' });
       else { blit(lebaoLie(Math.floor(T * 1.5) % 2), 176, FY - 40); zzz(262, FY - 44); }
       drawGF(90, FY + 8, { face: 1 });
       if (!lie && (t % 1.2) > .4 && (t % 1.2) < .9) blit(bamSpr(), 146, FY - 34);
@@ -369,7 +394,7 @@ const SCENES = [
     draw(t) {
       room('sunset');
       const offer = on(t, 2, 4.4);
-      drawLB(206, FY - 1, { chew: t < 2 || t > 5, arm: offer ? 'offer' : 'rest' });
+      drawLB(206, FY - 1, { chew: t < 2 || t > 5, arm: offer ? 'offer' : t < 2 ? 'chest' : 'idle', flip: offer });
       drawGF(110, FY + 8, { face: 1 });
       if (t >= 4.4) blit(bamSpr(), 132, FY - 22);
       if (on(t, 4.8, 6.8)) speech(118, FY - 46, '…………');
@@ -382,19 +407,21 @@ const SCENES = [
       }
       tag('16:40');
     } },
-  { name: '17:00 · 퇴근하는 판다', dur: 10.5, music: 'bao', cues: [[.3, () => SFX.bell()], [3.4, () => SFX.creak()], [4.3, () => SFX.thud()], [5, () => SFX.confirmed()], [8, () => SFX.rira()]],
+  { name: '17:00 · 퇴근하는 판다', dur: 11, music: 'bao', cues: [[.3, () => SFX.bell()], [.6, () => SFX.rumble(1.6)], [3.8, () => SFX.creak()], [4.7, () => SFX.thud()], [5.4, () => SFX.confirmed()], [8.4, () => SFX.rira()]],
     draw(t) {
       room('eve');
-      const cx = 170, open = 1 - ez(k01(t, 3.4, 4.3));
+      const cx = 170, open = 1 - ez(k01(t, 3.8, 4.7));
       crateBack(cx, FY);
-      if (open > 0) drawLB(cx, FY - 3, { arm: t < 3.4 ? 'wave' : 'rest', chew: false });
+      // 17시 정각, 러바오는 스스로 뛰어서 상자로 퇴근한다
+      if (t < 2.2) drawLB(lerp(330, cx, ez(k01(t, .6, 2.2))), FY + 2, { run: true, face: -1 });
+      else if (open > 0) drawLB(cx, FY - 3, { arm: t < 3.8 ? 'wave' : 'idle', chew: false });
       crateFront(cx, FY, open);
-      if (t < 3.4) speech(cx + 40, FY - 72, '(흔들흔들)');
+      if (on(t, 2.3, 3.8)) speech(cx + 40, FY - 78, '(흔들흔들)');
       ['alps', 'sister', 'seraphina'].forEach((id, i) => drawR(id, 30 + i * 22, FY + (i % 2) * 4, { face: 1, arm: 'b', mood: 'h', flap: true }));
       ['rosemarira', 'rosie', 'clerk'].forEach((id, i) => drawR(id, 244 + i * 22, FY + (i % 2) * 4, { face: -1, arm: 'b', mood: id === 'rosemarira' ? 'st' : 'h', flap: true }));
       tag('17:00');
-      if (on(t, 5, 8)) sysWin('LE BAO: DAY OFF CONFIRMED.', 'ok', t - 5);
-      if (on(t, 8, 10.5)) { speech(52, FY - 26, '또 오세요!'); speech(266, FY - 26, '다음 주 토요일!'); }
+      if (on(t, 5.4, 8.4)) sysWin('LE BAO: DAY OFF CONFIRMED.', 'ok', t - 5.4);
+      if (on(t, 8.4, 11)) { speech(52, FY - 26, '또 오세요!'); speech(266, FY - 26, '다음 주 토요일!'); }
     } },
   { name: '갓파더의 퇴근 시도', dur: 13, music: null, cues: [[2.6, () => SFX.confirmed()], [5.2, () => SFX.rira()]],
     draw(t) {

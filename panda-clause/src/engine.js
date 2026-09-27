@@ -62,7 +62,7 @@ function update(dt) {
 function drawTitle() {
   room('day');
   ctx.globalAlpha = .3; R(0, 0, W, H, '#1a120d'); ctx.globalAlpha = 1;
-  blit(lebao({ chew: Math.floor(T * 4) % 2, bam: 3, blink: (T % 4) < .12 }), 170, 52, false, 2);
+  blit(lebao({ arm: 'hold', chew: Math.floor(T * 4) % 2, bam: 3, blink: (T % 4) < .12 }), 170, 40, false, 2);
   sparkles(236, 104, 70, 12);
   text('판다 면제 조항', 14, 16, { f: F.xl, c: P.cr, o: P.ink, ow: 2 });
   text('리라 에피소드 2 · 러바오 특별 출연', 16, 50, { f: F.m, c: P.cr, o: P.ink });
@@ -77,7 +77,7 @@ function drawFin() {
   text('출연', W / 2, 60, { f: F.s, a: 'center', c: P.gold });
   text('러바오 · 갓파더 · 알프스 리라 · 시스터 리라 · 세라피나', W / 2, 72, { f: F.s, a: 'center', c: P.cr });
   text('로즈마리라 · 로지 · 문지기 리라 · 행정 리라', W / 2, 82, { f: F.s, a: 'center', c: P.cr });
-  drawLB(W / 2, 180, { chew: true, bam: 2 });
+  drawLB(W / 2, 184, { chew: true, bam: 2, arm: 'hold' });
   if (Math.floor(T * 2) % 2) text(coarse ? '화면을 눌러 다시 보기' : 'Space · 화면을 눌러 다시 보기', W / 2, 172 - 76, { f: F.m, a: 'center', c: P.cr, o: P.ink });
 }
 function draw() {
@@ -118,7 +118,7 @@ function frame(ts) {
   requestAnimationFrame(frame);
 }
 // 자동 시험용 (주소에 ?test 가 있을 때만)
-if (/[?&]test\b/.test(location.search)) window.__A = { rira, riraSide, lebao, go, start, st: () => ({ MODE, SI, ST, playing }), seek: (i, t) => { go(i); ST = t; playing = false; } };
+if (/[?&]test\b/.test(location.search)) window.__A = { rira, riraSide, lebao, lebaoRun, go, start, st: () => ({ MODE, SI, ST, playing }), seek: (i, t) => { go(i); ST = t; playing = false; } };
 function boot() { ASC = {}; syncUI(); requestAnimationFrame(frame); }
 const fams = ['7.5px Galmuri14', '10px Galmuri9', '12px Galmuri11', 'bold 12px Galmuri11', 'bold 18px Galmuri11', 'bold 24px Galmuri11'];
 if (document.fonts && document.fonts.load) {
