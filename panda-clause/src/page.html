@@ -1,0 +1,116 @@
+<title>판다 면제 조항</title>
+<style>
+/*FONTFACE*/
+:root {
+  color-scheme: dark;
+  --ground: #2a1d17;
+  --ground-dot: #3a2a21;
+  --frame: #fbf3e4;
+  --frame-dark: #d9c4a2;
+  --ink: #3b2a20;
+  --text: #fbf3e4;
+  --muted: #cdb89c;
+  --red: #d63a3a;
+  --gold: #ffc857;
+}
+html, body { background: var(--ground); }
+body {
+  margin: 0;
+  color: var(--text);
+  font: 13px/1.6 Galmuri9, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  background-color: var(--ground);
+  background-image: radial-gradient(var(--ground-dot) 1px, transparent 1.5px);
+  background-size: 16px 16px;
+  padding-inline: 16px;
+  padding-block: 20px 28px;
+}
+.wrap { max-width: 1680px; margin: 0 auto; display: grid; gap: 14px; }
+.game { display: grid; gap: 12px; justify-items: center; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+header p { flex: 1 1 16em; margin: 0; color: var(--muted); font-family: Galmuri9, system-ui, sans-serif; }
+h1 {
+  margin: 0; font: 700 24px/1.2 Galmuri11, system-ui, sans-serif; color: var(--frame);
+  text-shadow: 2px 0 var(--ink), -2px 0 var(--ink), 0 2px var(--ink), 0 -2px var(--ink), 3px 3px 0 var(--red);
+  letter-spacing: 1px;
+}
+.fs {
+  align-self: center; font: 11px/1 Galmuri11, system-ui, sans-serif; color: var(--ink); cursor: pointer;
+  background: var(--frame); border: 0; padding: 7px 10px 8px;
+  box-shadow: 0 0 0 2px var(--ink), 0 3px 0 2px var(--red);
+}
+.fs:hover { background: #fffaf2; }
+.fs:active { transform: translateY(2px); box-shadow: 0 0 0 2px var(--ink), 0 1px 0 2px var(--red); }
+.fs:focus-visible { outline: 3px solid var(--gold); outline-offset: 4px; }
+.screen {
+  position: relative;
+  /* 창 높이에 맞춰 16:9 화면이 한눈에 들어오게 */
+  width: min(100%, calc((100vh - 150px) * 16 / 9 + 12px));
+  width: min(100%, calc((100dvh - 150px) * 16 / 9 + 12px));
+  min-width: min(100%, 320px);
+  background: var(--frame);
+  padding: 6px;
+  box-shadow: 0 0 0 3px var(--ink), 6px 6px 0 3px var(--red);
+}
+.screen:fullscreen { width: 100vw; height: 100vh; padding: 0; box-shadow: none; background: #140d0a; display: grid; place-items: center; }
+.screen:fullscreen .stage { width: min(100vw, calc(100vh * 16 / 9)); }
+.screen:-webkit-full-screen { width: 100vw; height: 100vh; padding: 0; box-shadow: none; background: #140d0a; display: grid; place-items: center; }
+.screen:-webkit-full-screen .stage { width: min(100vw, calc(100vh * 16 / 9)); }
+.stage { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; background: #f1dfc0; box-shadow: inset 0 0 0 2px var(--frame-dark); }
+.stage canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+#game { image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; outline: none; }
+#game:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.keys { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-family: Galmuri9, system-ui, sans-serif; }
+.keys li { display: flex; align-items: center; gap: 6px; }
+kbd {
+  font: 11px/1 Galmuri11, ui-monospace, monospace; color: var(--ink); background: #fffaf2;
+  padding: 4px 6px 5px; box-shadow: 0 2px 0 var(--frame-dark), 0 0 0 1px var(--ink);
+}
+footer { color: #9c8670; font-size: 11px; font-family: Galmuri7, Galmuri9, system-ui, sans-serif; }
+.ctrl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.btn {
+  font: 11px/1 Galmuri11, system-ui, sans-serif; color: var(--ink); cursor: pointer;
+  background: var(--frame); border: 0; padding: 7px 10px 8px;
+  box-shadow: 0 0 0 2px var(--ink), 0 3px 0 2px var(--frame-dark);
+}
+.btn.main { background: var(--red); color: var(--frame); box-shadow: 0 0 0 2px var(--ink), 0 3px 0 2px #8e2230; }
+.btn:active { transform: translateY(2px); }
+.btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 4px; }
+.now { color: var(--muted); font-family: Galmuri9, system-ui, sans-serif; margin-inline-start: 4px; }
+@media (max-width: 520px) {
+  h1 { font-size: 20px; }
+  .screen { padding: 4px; }
+}
+</style>
+<div class="wrap">
+  <header>
+    <h1>판다 면제 조항</h1>
+    <p>리라 에피소드 2 · 러바오 특별 출연. 이 세계에서 노동을 면제받는 존재는 딱 하나다.</p>
+    <button class="fs" id="fs" type="button">전체 화면</button>
+  </header>
+  <div class="game">
+  <div class="screen" id="screen">
+    <div class="stage">
+      <canvas id="game" width="1280" height="720" tabindex="0" aria-label="판다 면제 조항 픽셀 애니메이션. 화면을 누르면 재생하거나 멈춰요."></canvas>
+    </div>
+  </div>
+  <div class="ctrl" role="group" aria-label="재생 조작">
+    <button class="btn" id="restart" type="button">처음부터</button>
+    <button class="btn" id="prev" type="button">◀ 이전 장면</button>
+    <button class="btn main" id="play" type="button">▶ 재생</button>
+    <button class="btn" id="next" type="button">다음 장면 ▶</button>
+    <button class="btn" id="mute" type="button">소리</button>
+    <span class="now" id="scene" aria-live="polite">처음 화면</span>
+  </div>
+  <ul class="keys" aria-label="조작법">
+    <li><kbd>Space</kbd> 재생 · 멈춤</li>
+    <li><kbd>← →</kbd> 장면 이동</li>
+    <li><kbd>R</kbd> 처음부터</li>
+    <li><kbd>M</kbd> 소리</li>
+    <li><kbd>F</kbd> 전체 화면</li>
+  </ul>
+  </div>
+  <footer>리라 세계관 팬 창작 애니메이션입니다. 러바오는 사진을 보고 새로 그린 픽셀 그림이고, 그림과 소리는 모두 코드로 만들었어요. 글꼴: 갈무리(Galmuri, SIL OFL 1.1).</footer>
+</div>
+<script>
+/*GAME*/
+</script>
