@@ -279,6 +279,15 @@ function gell(g, cx, cy, rx, ry, c) {
       if (dx * dx + dy * dy <= 1) gset(g, x, y, c);
     }
 }
+function gaxis(g, cx, cy, rx, ry, ux, uy, c) {
+  const L = Math.hypot(ux, uy); ux /= L; uy /= L;
+  const m = Math.max(rx, ry) + 1;
+  for (let y = Math.floor(cy - m); y <= Math.ceil(cy + m); y++)
+    for (let x = Math.floor(cx - m); x <= Math.ceil(cx + m); x++) {
+      const dx = x + .5 - cx, dy = y + .5 - cy, p = (dx * ux + dy * uy) / ry, q = (-dx * uy + dy * ux) / rx;
+      if (p * p + q * q <= 1) gset(g, x, y, c);
+    }
+}
 function gring(g, cx, cy, r0, r1, c) {
   for (let y = Math.floor(cy - r0); y <= Math.ceil(cy + r0); y++)
     for (let x = Math.floor(cx - r0); x <= Math.ceil(cx + r0); x++) {
@@ -357,101 +366,145 @@ function blit(c, x, y, flip, sc = 1) {
 const disc = (r, c) => spr('disc' + r + c, r * 4 + 2, r * 4 + 2, g => gell(g, r * 2 + 1, r * 2 + 1, r * 2, r * 2, c));
 const ring = (r, c, th = 2) => spr('ring' + r + c + th, r * 4 + 2, r * 4 + 2, g => gring(g, r * 2 + 1, r * 2 + 1, r * 2, r * 2 - th, c));
 
-// ---------- 리라 (40x46 격자 = 20x23칸, 발바닥이 맨 아래)
-// kind: rira · alps · sister · seraphina · rosemarira · rosie · clerk · clerk2
-// mood: n 보통 · h 웃음 · st 엄격 · so 엄숙 / ear: -1~1 귀 펄럭 / step: 발 들기 / arm: d 내림 · u 듦 · b 둘 다 듦
+// ---------- 리라 (40x46 격자 = 20x23칸, 발바닥이 맨 아래). 참조: 리라 인형 스프라이트 시트
+// 회색빛 도는 베이지 곱슬 털, 키의 절반쯤 되는 큰 머리, 안쪽이 넓게 분홍인 둥근 귀,
+// 얼굴 가운데 아래의 크고 짙은 갈색 코, 코 양옆 위에 붙은 작은 주황 테두리 눈, 코 밑 바느질 세로 입선,
+// 짧은 팔, 앉으면 앞으로 내민 크고 둥근 분홍 발바닥. 꼬리 없음.
+const RC = { cr: '#ebe3d2', sh: '#d6c9b1', hi: '#f5efe3', ol: '#6e5a49', pink: '#f2b7ae', pinkD: '#e39a92', nose: '#4a3226', noseL: '#7d5b48', mouth: '#6b4a3a', eye: '#f08a24', pupil: '#1f140e' };
+const RIRA_ARM = { alps: P.white, rosemarira: P.plum, sister: P.ivory, seraphina: P.ivory, clerk2: P.sleeve };
+// 옷: 몸 위에 겹치는 부분 (앞모습 cx=20, 옆모습은 cx를 옮겨 쓴다)
+function riraOutfit(g, kind, cx, cy) {
+  const nun = kind === 'sister' || kind === 'seraphina';
+  if (kind === 'alps') {
+    gell(g, cx, cy - 3.5, 9.5, 5, P.white);
+    gpoly(g, [[cx - 10, cy - 1.5], [cx + 10, cy - 1.5], [cx + 13, cy + 7.5], [cx - 13, cy + 7.5]], P.red); grect(g, cx - 13, cy + 6.5, 26, 1, P.redD);
+    grect(g, cx - 5, cy - .5, 10, 6, P.white);
+    grect(g, cx - 6, cy - 8.5, 2, 8, P.red); grect(g, cx + 4, cy - 8.5, 2, 8, P.red);
+  } else if (kind === 'rosemarira') {
+    gpoly(g, [[cx - 10, cy - 2.5], [cx + 10, cy - 2.5], [cx + 12, cy + 8.5], [cx - 12, cy + 8.5]], P.plum);
+    for (let y = cy; y < cy + 8; y += 3) grect(g, cx - 7, y, 14, 1, P.plumD);
+  } else if (nun) grect(g, cx - 4, cy - 6.5, 8, 13, P.ivoryL);
+}
+function limb(g, cx, cy, rx, ry, ux, uy, c) { gaxis(g, cx, cy, rx + 1, ry + 1, ux, uy, RC.ol); gaxis(g, cx, cy, rx, ry, ux, uy, c); }
+function blob(g, cx, cy, rx, ry, c) { gell(g, cx, cy, rx + 1, ry + 1, RC.ol); gell(g, cx, cy, rx, ry, c); }
+function riraEye(g, x, y, mood, blink) {
+  const D = RC.pupil;
+  if (blink) { gset(g, x - 1, y, D); gset(g, x, y + 1, D); gset(g, x + 1, y, D); }
+  else if (mood === 'h') { gset(g, x - 1, y + 1, D); gset(g, x, y, D); gset(g, x + 1, y + 1, D); }
+  else if (mood === 'so') { grect(g, x - 1, y, 3, 1, D); gset(g, x, y + 1, RC.eye); }
+  else { grect(g, x - 1, y - 1, 3, 3, RC.eye); gset(g, x - 1, y - 1, RC.cr); gset(g, x + 1, y - 1, RC.cr); gset(g, x - 1, y + 1, RC.cr); gset(g, x + 1, y + 1, RC.cr); gset(g, x, y, D); }
+}
+// 앞모습 (앉음). mood: n · h 웃음 · st 엄격 · so 엄숙 / ear: -1~1 귀 펄럭 / step: 발 하나 들기(-1·1)
+// arm: d 내림 · u 한 팔 흔들기 · b 두 팔 번쩍 · m 두 앞발로 입 가리기
 function rira(kind, o = {}) {
   const mood = o.mood || 'n', ear = Math.round((o.ear || 0) * 3) / 3, step = o.step || 0, arm = o.arm || 'd', blink = o.blink ? 1 : 0;
-  const key = `r|${kind}|${mood}|${ear}|${step}|${arm}|${blink}`;
-  return spr(key, 40, 46, g => {
-    const cr = P.cr, nun = kind === 'sister' || kind === 'seraphina';
-    // 수녀 베일(뒤)
-    if (nun) { gell(g, 20, 17, 14, 12.5, P.ivory); gpoly(g, [[6, 17], [34, 17], [36, 35], [4, 35]], P.ivoryD); gpoly(g, [[7, 17], [33, 17], [34, 34], [6, 34]], P.ivory); }
-    // 귀: 펄럭일 때 위아래로 들썩이고, 내려가면 바깥으로 벌어진다
-    const ey = 8.5 - ear * 2.6, spread = 11 + Math.max(0, -ear) * 1.6 + Math.abs(ear) * .4;
-    for (const s of [-1, 1]) {
-      const x = 20 + s * spread;
-      gell(g, x, ey, 4.6, 5.4, cr); gell(g, x, ey + .8, 2.4, 3.2, P.ear);
-    }
-    // 팔(몸 뒤)
-    const armC = kind === 'alps' ? P.white : kind === 'rosemarira' ? P.plum : nun ? P.ivory : kind === 'clerk2' ? P.sleeve : cr;
-    const armAt = (s, up) => up ? gell(g, 20 + s * 11, 24, 2.8, 3.8, armC) : gell(g, 20 + s * 10.2, 31, 2.8, 4.2, armC);
-    armAt(-1, arm === 'u' || arm === 'b'); armAt(1, arm === 'b');
+  return spr(`r|${kind}|${mood}|${ear}|${step}|${arm}|${blink}`, 40, 46, g => {
+    const cr = RC.cr, nun = kind === 'sister' || kind === 'seraphina', armC = RIRA_ARM[kind] || cr;
+    if (nun) { gell(g, 20, 17, 15, 13, P.ivory); gpoly(g, [[5, 18], [35, 18], [37, 36], [3, 36]], P.ivoryD); gpoly(g, [[6, 18], [34, 18], [35.5, 35], [4.5, 35]], P.ivory); }
+    // 귀: 펄럭이면 위아래로 들썩이고, 내려가면 바깥으로 벌어진다
+    const ey = 7.5 - ear * 2.6, spread = 12 + Math.max(0, -ear) * 1.6 + Math.abs(ear) * .4;
+    for (const s of [-1, 1]) { const x = 20 + s * spread; gell(g, x, ey, 5.4, 5.4, cr); gell(g, x - s * .6, ey + .6, 3.5, 3.5, RC.pink); }
+    // 올린 팔 (몸 뒤)
+    const up = s => { gaxis(g, 20 + s * 12.5, 22.5, 3.3, 7, s * 7, -11, armC); gell(g, 20 + s * 16.3, 16.8, 3.1, 3.1, cr); };
+    if (arm === 'u') up(1);
+    if (arm === 'b') { up(-1); up(1); }
     // 몸
-    gell(g, 20, 33, 10, 8.5, nun ? P.ivoryD : P.crS); gell(g, 20, 32, 9.5, 7.8, nun ? P.ivory : cr);
-    if (kind === 'alps') {
-      gell(g, 20, 29, 9, 5, P.white);
-      gpoly(g, [[11, 31], [29, 31], [32, 40], [8, 40]], P.red); grect(g, 8, 39, 24, 1, P.redD);
-      grect(g, 15, 32, 10, 6, P.white); for (let i = 15; i < 25; i += 2) gset(g, i, 38, P.white);
-      grect(g, 14, 24, 2, 8, P.red); grect(g, 24, 24, 2, 8, P.red);
-    } else if (kind === 'rosemarira') {
-      gell(g, 20, 32, 9.5, 7.8, P.plum);
-      gpoly(g, [[11, 30], [29, 30], [31, 41], [9, 41]], P.plum); grect(g, 9, 40, 22, 1, P.plumD);
-      for (let y = 32; y < 40; y += 3) grect(g, 13, y, 14, 1, P.plumD);
-    } else if (nun) {
-      grect(g, 16, 26, 8, 13, P.ivoryL);
-    }
-    // 발 (드레스 밑으로 꼭 보이게 맨 나중에)
-    const foot = (x, lift) => {
-      const y = 42.3 - lift;
-      gell(g, x, y, 4.6, 2.9, cr);
-      gell(g, x, y + .6, 3, lift ? 2.2 : 1.6, P.pad);
-    };
-    foot(14.5, step < 0 ? 1.5 : 0); foot(25.5, step > 0 ? 1.5 : 0);
-    // 머리
-    gell(g, 20, 18, 12.5, 10.5, cr);
-    if (nun) { gell(g, 20, 12.5, 12, 4.6, P.ivory); grect(g, 9, 13, 22, 2, P.ivoryL); }
-    if (!nun && kind !== 'clerk') for (const [x, y] of [[13, 8], [17, 7], [22, 7], [26, 8]]) gset(g, x, y, cr);
+    gell(g, 20, 33.5, 11, 9, nun ? P.ivoryD : RC.sh);
+    gell(g, 20, 32.5, 10.4, 8.3, nun ? P.ivory : kind === 'rosemarira' ? P.plum : cr);
+    riraOutfit(g, kind, 20, 32.5);
+    // 발 자리 (테두리용 바탕)
+    for (const s of [-1, 1]) gell(g, 20 + s * 8.5, 40.5, 6.2, 5.3, cr);
+    // 큰 머리
+    gell(g, 20, 16, 13.6, 11.6, cr);
+    for (const [x, y] of [[13, 4], [18, 3], [23, 3], [27, 4]]) gset(g, x, y + 1, cr);
+    if (nun) { gell(g, 20, 11.5, 12.6, 5, P.ivory); grect(g, 8, 13, 24, 2, P.ivoryL); }
+    if (kind === 'clerk') { grect(g, 7, 8, 26, 2, P.green); gpoly(g, [[10, 10], [30, 10], [32, 12], [8, 12]], P.greenL); }
     if (kind === 'rosie') {
-      const bx = 29, by = 7 - ear * 2.6;
+      const bx = 32, by = 3.5 - ear * 2.6;
       gpoly(g, [[bx, by + 2], [bx - 5, by - 2], [bx - 5, by + 5]], P.pink); gpoly(g, [[bx, by + 2], [bx + 5, by - 2], [bx + 5, by + 5]], P.pink);
-      gline(g, bx - 1, by + 3, bx - 4, by + 8, P.pink); gline(g, bx + 1, by + 3, bx + 3, by + 8, P.pink);
+      gline(g, bx - 1, by + 3, bx - 3, by + 8, P.pink); gline(g, bx + 1, by + 3, bx + 3, by + 8, P.pink);
     }
-    if (kind === 'clerk') { grect(g, 8, 9, 24, 2, P.green); gpoly(g, [[11, 11], [29, 11], [31, 13], [9, 13]], P.greenL); }
-    // 앞팔
-    if (arm === 'b') armAt(1, true);
-    if (kind === 'clerk' && arm !== 'b') { grect(g, 24, 27, 11, 13, P.woodD); grect(g, 25, 29, 9, 10, P.white); grect(g, 28, 26, 3, 2, P.stone); }
-    gout(g, P.ol);
-    // 곱슬 털결
-    gtex(g, cr, '#ede0c6', null, 13);
-    if (kind === 'rosie') { const bx = 29, by = Math.floor(7 - ear * 2.6); grect(g, bx - 1, by + 1, 2, 2, P.pinkD); gset(g, bx - 3, by + 1, P.pinkD); gset(g, bx + 3, by + 1, P.pinkD); }
-    // 테두리 뒤 세부
+    gout(g, RC.ol);
+    // 턱 아래 그늘: 큰 머리가 몸 위에 얹힌 느낌
+    for (let x = 11; x < 29; x++) { const y = Math.abs(x - 19.5) > 6 ? 26 : 27; if (gget(g, x, y + 1) && gget(g, x, y + 1) !== RC.ol) gset(g, x, y + 1, '#d3c5ad'); }
+    // 앉아서 앞으로 내민 발: 크고 둥근 분홍 발바닥
+    for (const s of [-1, 1]) {
+      const x = 20 + s * 8.5, lift = step === s ? 1.5 : 0;
+      blob(g, x, 40.5 - lift, 6.2, 5.3, cr); gell(g, x, 41 - lift, 4.5, 3.9, RC.pink);
+    }
+    // 내린 팔과 앞발 (윤곽선을 둘러 몸 위에서도 보이게)
+    const down = s => { limb(g, 20 + s * 9.4, 30.5, 3, 5.4, -s * 2, 6, armC); blob(g, 20 + s * 8.2, 35.2, 2.7, 2.5, cr); };
+    if (arm === 'd') { down(-1); down(1); }
+    else if (arm === 'u') down(-1);
+    else if (arm === 'm') for (const s of [-1, 1]) limb(g, 20 + s * 8.2, 28.5, 3, 5, -s * 4, -5, armC);
+    if (kind === 'clerk' && arm === 'd') { grect(g, 23, 26, 13, 15, RC.ol); grect(g, 24, 27, 11, 13, P.woodD); grect(g, 25, 29, 9, 10, P.white); grect(g, 28, 26, 3, 2, P.stone); }
+    gtex(g, cr, '#ddd1bc', RC.hi, 19, 23);
+    if (kind === 'rosie') { const bx = 32, by = Math.floor(3.5 - ear * 2.6); grect(g, bx - 1, by + 1, 2, 2, P.pinkD); gset(g, bx - 3, by + 1, P.pinkD); gset(g, bx + 3, by + 1, P.pinkD); }
     if (kind === 'rosemarira') { grect(g, 15, 24, 10, 2, P.white); grect(g, 19, 25, 2, 2, P.ame); gset(g, 19, 25, '#d7b0f5'); gline(g, 27, 26, 29, 23, P.herbR); gset(g, 28, 24, P.greenL); }
     if (nun) {
       // 손으로 놓은 삐뚤삐뚤한 자수
       const st = kind === 'seraphina'
-        ? [[20, 28, P.goldD], [20, 29, P.goldD], [21, 30, P.goldD], [20, 31, P.goldD], [20, 32, P.goldD], [18, 30, P.goldD], [19, 29, P.goldD], [22, 30, P.goldD], [23, 31, P.goldD]]
+        ? [[20, 28], [20, 29], [21, 30], [20, 31], [20, 32], [18, 30], [19, 29], [22, 30], [23, 31]].map(p => [...p, P.goldD])
         : [[18, 31, P.pinkD], [20, 30, P.pinkD], [21, 32, P.pinkD], [19, 33, P.pinkD], [17, 35, '#5b8fd6'], [23, 34, '#5b8fd6'], [22, 36, P.green]];
       for (const [x, y, c] of st) gset(g, x, y, c);
     }
-    // 얼굴: 털 코와 주둥이
-    gell(g, 20, 22.5, 5.6, 3.7, P.crL);
-    grect(g, 18, 18, 4, 1, P.nose); grect(g, 17, 19, 6, 1, P.nose); grect(g, 18, 20, 4, 1, P.nose); grect(g, 19, 21, 2, 1, P.nose);
-    gset(g, 17, 18, P.noseL); gset(g, 22, 18, P.noseL); gset(g, 18, 18, P.noseL);
-    const D = P.pupil;
-    grect(g, 19, 22, 1, 2, P.ol);
-    if (mood === 'st') grect(g, 17, 24, 6, 1, P.ol);
-    else if (mood === 'h') { gset(g, 16, 23, P.ol); gset(g, 17, 24, P.ol); gset(g, 18, 24, P.ol); gset(g, 20, 24, P.ol); gset(g, 21, 24, P.ol); gset(g, 22, 23, P.ol); }
-    for (const ex of [14, 25]) {
-      const x0 = ex < 20 ? 12 : 24;
-      if (blink) grect(g, x0, 16, 4, 1, D);
-      else if (mood === 'h') { gset(g, x0, 16, D); gset(g, x0 + 1, 15, D); gset(g, x0 + 2, 15, D); gset(g, x0 + 3, 16, D); }
-      else if (mood === 'so') { grect(g, x0, 14, 4, 1, P.crS); grect(g, x0, 15, 4, 1, D); grect(g, x0, 16, 4, 2, P.eye); grect(g, x0 + 1, 16, 2, 1, D); }
-      else { grect(g, x0 + 1, 14, 2, 1, P.eye); grect(g, x0, 15, 4, 2, P.eye); grect(g, x0 + 1, 17, 2, 1, P.eye); grect(g, x0 + 1, 15, 2, 2, D); gset(g, x0 + 1, 15, P.white); }
-      if (mood === 'st' && !blink) {
-        if (ex < 20) { gset(g, 12, 12, D); gset(g, 13, 12, D); gset(g, 14, 13, D); gset(g, 15, 13, D); }
-        else { gset(g, 24, 13, D); gset(g, 25, 13, D); gset(g, 26, 12, D); gset(g, 27, 12, D); }
-      }
-      if (mood === 'h') grect(g, ex < 20 ? 11 : 26, 20, 3, 1, P.blush);
-    }
+    // 얼굴: 코 둘레가 살짝 밝고, 크고 짙은 갈색 코, 바느질 세로 입선
+    gell(g, 20, 21, 5.6, 4, RC.hi);
+    grect(g, 17, 17, 6, 1, RC.nose); grect(g, 16, 18, 8, 2, RC.nose); grect(g, 17, 20, 6, 1, RC.nose); grect(g, 18, 21, 4, 1, RC.nose);
+    gset(g, 18, 17, RC.noseL); gset(g, 17, 18, RC.noseL);
+    grect(g, 19, 22, 1, 3, RC.mouth);
+    if (mood === 'st') { grect(g, 17, 25, 5, 1, RC.mouth); }
+    riraEye(g, 13, 17, mood, blink); riraEye(g, 26, 17, mood, blink);
+    if (mood === 'st' && !blink) { gset(g, 11, 14, RC.pupil); gset(g, 12, 14, RC.pupil); gset(g, 13, 15, RC.pupil); gset(g, 26, 15, RC.pupil); gset(g, 27, 14, RC.pupil); gset(g, 28, 14, RC.pupil); }
+    if (mood === 'h') { grect(g, 9, 20, 3, 1, RC.pink); grect(g, 28, 20, 3, 1, RC.pink); }
     if (kind === 'clerk2') {
-      // 행정 리라: 동그란 안경
-      for (const x0 of [11, 23]) { grect(g, x0, 13, 6, 1, P.ink); grect(g, x0, 18, 6, 1, P.ink); grect(g, x0, 13, 1, 6, P.ink); grect(g, x0 + 5, 13, 1, 6, P.ink); }
-      grect(g, 17, 14, 6, 1, P.ink);
+      for (const x0 of [10, 23]) { grect(g, x0, 14, 7, 1, P.ink); grect(g, x0, 20, 7, 1, P.ink); grect(g, x0, 14, 1, 7, P.ink); grect(g, x0 + 6, 14, 1, 7, P.ink); }
+      grect(g, 17, 15, 6, 1, P.ink);
     }
+    // 두 앞발로 입 가리기 (얼굴 위에 테두리를 따로 둘러 그린다)
+    if (arm === 'm') for (const x of [16, 23]) { gell(g, x, 23.5, 3.6, 3.3, RC.ol); gell(g, x, 23.5, 2.8, 2.5, cr); }
   });
 }
-
+// 옆모습 걷기 (오른쪽을 본다, 4프레임). 뒤로 찬 발의 분홍 발바닥이 보인다
+function riraSide(kind, f, o = {}) {
+  const ear = Math.round((o.ear || 0) * 3) / 3, mood = o.mood || 'n';
+  return spr(`rs|${kind}|${f}|${ear}|${mood}`, 40, 46, g => {
+    const cr = RC.cr, nun = kind === 'sister' || kind === 'seraphina', armC = RIRA_ARM[kind] || cr;
+    const s = [1, 0, -1, 0][f], bob = f % 2 ? -1 : 0;
+    if (nun) { gell(g, 17, 17 + bob, 13, 12, P.ivory); gpoly(g, [[5, 18 + bob], [20, 18 + bob], [19, 36], [4, 34]], P.ivory); }
+    const leg = (x, back) => {
+      gell(g, x, 41, 5.2, 4.3, cr);
+      if (back) gell(g, x - 2.4, 41, 2.4, 3.4, RC.pink); else gell(g, x + 1, 43.6, 3.4, 1.3, RC.pink);
+    };
+    // 뒤쪽 팔과 다리
+    gaxis(g, 19 + s * 3, 30 + bob, 3, 5.5, s * 3, 6, RC.sh);
+    const la = 19 + s * 5, lb = 19 - s * 5;
+    leg(Math.min(la, lb), s !== 0);
+    // 몸
+    gell(g, 19, 33 + bob, 9.6, 8.6, nun ? P.ivory : kind === 'rosemarira' ? P.plum : cr);
+    riraOutfit(g, kind, 19, 33 + bob);
+    // 큰 머리, 앞으로 나온 주둥이, 머리 위의 귀 (안쪽 분홍이 앞을 본다)
+    gell(g, 20, 16 + bob, 12.6, 11.4, cr);
+    gell(g, 30.5, 19.5 + bob, 5.4, 4.4, cr);
+    gell(g, 14, 5 + bob - ear * 2, 5.2, 5.2, cr); gell(g, 15.2, 5.6 + bob - ear * 2, 3.3, 3.3, RC.pink);
+    if (nun) { gell(g, 17, 11 + bob, 12, 5, P.ivory); }
+    if (kind === 'clerk') { grect(g, 9, 7 + bob, 20, 2, P.green); gpoly(g, [[26, 9 + bob], [34, 9 + bob], [36, 11 + bob], [26, 11 + bob]], P.greenL); grect(g, 26, 26 + bob, 4, 12, P.woodD); grect(g, 27, 27 + bob, 3, 10, P.white); }
+    if (kind === 'rosie') { const by = 3 + bob - ear * 2; gpoly(g, [[16, by + 2], [11, by - 2], [11, by + 5]], P.pink); gpoly(g, [[16, by + 2], [21, by - 2], [21, by + 5]], P.pink); }
+    gout(g, RC.ol);
+    // 앞쪽 다리와 팔 (윤곽선을 둘러 몸 위에서도 보이게)
+    const fx = s !== 0 ? Math.max(la, lb) : 19;
+    blob(g, fx, 41, 5.2, 4.3, cr); gell(g, fx + 1, 43.6, 3.4, 1.3, RC.pink);
+    limb(g, 20 - s * 3, 31 + bob, 3, 5.5, -s * 3, 6, armC); blob(g, 20 - s * 5, 35.5 + bob, 2.6, 2.4, cr);
+    gtex(g, cr, '#ddd1bc', RC.hi, 19, 23);
+    if (kind === 'rosemarira') { grect(g, 20, 25 + bob, 5, 2, P.white); gset(g, 23, 26 + bob, P.ame); }
+    // 얼굴: 주둥이 끝의 짙은 갈색 코, 작은 주황 테두리 눈
+    gell(g, 34.6, 18.6 + bob, 2.9, 2.5, RC.nose); gset(g, 34, 17 + bob, RC.noseL);
+    grect(g, 32, 22 + bob, 1, 2, RC.mouth);
+    riraEye(g, 26, 16 + bob, mood, false);
+    if (mood === 'h') grect(g, 24, 20 + bob, 3, 1, RC.pink);
+    if (kind === 'clerk2') { grect(g, 23, 13 + bob, 7, 1, P.ink); grect(g, 23, 19 + bob, 7, 1, P.ink); grect(g, 23, 13 + bob, 1, 7, P.ink); grect(g, 29, 13 + bob, 1, 7, P.ink); }
+  });
+}
 // ---------- 갓파더 (개미핥기, 176x100 격자 = 88x50칸, 오른쪽을 본다)
 // 거대 개미핥기: 늘어진 깃발 꼬리, 가늘고 긴 주둥이, 목에서 등으로 가늘어지는 흰 테두리 검은 띠, 밝은 앞다리의 검은 손목 띠와 큰 발톱
 function anteater(f) {
@@ -1558,14 +1611,14 @@ function drawRoom() {
 }
 function drawRira(r) {
   const moving = Math.abs(r.tx - r.x) > .8;
-  const step = moving ? (Math.floor(r.walkT * 8) % 2 ? 1 : -1) : 0;
   const ear = r.flap > 0 ? Math.sin(r.flap * 30) : Math.sin(T * 2 + r.ph) * .34;
   const arm = r.bub && r.bubT > 0 && r.mood === 'h' ? 'b' : r.bub ? 'u' : 'd';
-  const s = rira(r.kind, { mood: r.mood, ear, step, arm, blink: r.blink > 0 });
+  const s = moving ? riraSide(r.kind, Math.floor(r.walkT * 8) % 4, { ear, mood: r.mood }) : rira(r.kind, { mood: r.mood, ear, arm, blink: r.blink > 0 });
   const k = r.popT < 1 ? .4 + r.popT * .6 : 1;
   const bob = moving ? 0 : (Math.sin(T * 3 + r.ph) > .6 ? -.5 : 0);
-  if (k !== 1) { ctx.save(); ctx.translate(r.x, RIRA_Y); ctx.scale(k, k); blit(s, -10, -23, r.face > 0); ctx.restore(); }
-  else blit(s, r.x - 10, RIRA_Y - 23 + r.hop + bob, r.face > 0);
+  const flip = moving ? r.face < 0 : r.face > 0;
+  if (k !== 1) { ctx.save(); ctx.translate(r.x, RIRA_Y); ctx.scale(k, k); blit(s, -10, -23, flip); ctx.restore(); }
+  else blit(s, r.x - 10, RIRA_Y - 23 + r.hop + bob, flip);
 }
 function drawPlayer() {
   const f = PL.moving ? Math.floor(PL.walkT * 6) % 4 : 0;

@@ -118,7 +118,7 @@ function frame(ts) {
   requestAnimationFrame(frame);
 }
 // 자동 시험용 (주소에 ?test 가 있을 때만)
-if (/[?&]test\b/.test(location.search)) window.__A = { go, start, st: () => ({ MODE, SI, ST, playing }), seek: (i, t) => { go(i); ST = t; playing = false; } };
+if (/[?&]test\b/.test(location.search)) window.__A = { rira, riraSide, lebao, go, start, st: () => ({ MODE, SI, ST, playing }), seek: (i, t) => { go(i); ST = t; playing = false; } };
 function boot() { ASC = {}; syncUI(); requestAnimationFrame(frame); }
 const fams = ['7.5px Galmuri14', '10px Galmuri9', '12px Galmuri11', 'bold 12px Galmuri11', 'bold 18px Galmuri11', 'bold 24px Galmuri11'];
 if (document.fonts && document.fonts.load) {

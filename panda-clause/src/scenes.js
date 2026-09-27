@@ -2,15 +2,6 @@
 // 사진의 특징: 둥글고 볼이 통통한 흰 얼굴, 아래 바깥으로 처진 검은 눈 패치, 까만 동그란 귀, 넓은 까만 코,
 // 태연한 표정, 가슴과 어깨를 두르는 검은 띠, 검은 팔다리. 턱 아래 털은 살짝 베이지.
 const PB = { w: '#f6f2ea', w2: '#e9dfcd', k: '#221e24', k2: '#3a343f', ol: '#17141a', eye: '#6a4630', nose: '#141116', pad: '#4f4852', mouth: '#9a8d84', tongue: '#ec8c9a', lid: '#6d6570' };
-function gaxis(g, cx, cy, rx, ry, ux, uy, c) {
-  const L = Math.hypot(ux, uy); ux /= L; uy /= L;
-  const m = Math.max(rx, ry) + 1;
-  for (let y = Math.floor(cy - m); y <= Math.ceil(cy + m); y++)
-    for (let x = Math.floor(cx - m); x <= Math.ceil(cx + m); x++) {
-      const dx = x + .5 - cx, dy = y + .5 - cy, p = (dx * ux + dy * uy) / ry, q = (-dx * uy + dy * ux) / rx;
-      if (p * p + q * q <= 1) gset(g, x, y, c);
-    }
-}
 function bamboo(g, x0, y0, x1, y1) {
   gline(g, x0, y0, x1, y1, '#6fae3f', 4);
   const n = Math.hypot(x1 - x0, y1 - y0);
@@ -213,9 +204,9 @@ function drawR(kind, x, fy, o = {}) {
   const ear = o.flap ? Math.sin(T * 30 + ph) : Math.sin(T * 2 + ph) * .34;
   const blink = ((T * .7 + ph) % 3.1) < .1;
   const hop = o.hop ? -Math.abs(Math.sin(T * 8 + ph)) * 3 : 0;
-  const step = o.walk ? (Math.floor(T * 8) % 2 ? 1 : -1) : 0;
-  const s = rira(kind === 'rira2' ? 'rira' : kind, { mood: o.mood || (kind === 'rosemarira' ? 'st' : kind === 'seraphina' ? 'so' : 'n'), ear, step, arm: o.arm || 'd', blink, sit: o.sit });
-  blit(s, x - 10, fy - 23 + hop, o.face > 0);
+  const k = kind === 'rira2' ? 'rira' : kind, mood = o.mood || (kind === 'rosemarira' ? 'st' : kind === 'seraphina' ? 'so' : 'n');
+  if (o.walk) { blit(riraSide(k, Math.floor(T * 8 + ph) % 4, { ear, mood }), x - 10, fy - 23, o.face < 0); return; }
+  blit(rira(k, { mood, ear, arm: o.arm || 'd', blink }), x - 10, fy - 23 + hop, o.face > 0);
 }
 function drawLB(x, fy, o = {}) {
   const chew = o.chew ? Math.floor(T * 5) % 2 : 0, blink = ((T * .5) % 4) < .12;
