@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""rira-shift/src/game.js 의 공통 부분(화면·색·글꼴·소리·픽셀 격자·리라·갓파더 그림)을 src/common.js 로 옮겨 온다.
+"""rira-shift/src/game.js 의 공통 부분(화면·색·글꼴·소리·픽셀 격자·리라·갓파더·사람·앞발 그림)을 src/common.js 로 옮겨 온다.
 
 리라나 갓파더 그림을 게임 쪽에서 고친 뒤 이 스크립트를 돌리고 build.py 를 다시 돌리면 두 작품의 그림이 같아진다.
 """
@@ -28,7 +28,7 @@ s = '\n'.join([
     part('const W = 320', '// ---------- 저장'),
     'const G = { music: true, sfx: true };',
     part('// ---------- 소리: WebAudio', '// ---------- 픽셀 격자'),
-    part('// ---------- 픽셀 격자', '// 사람 모습의 갓파더'),
+    part('// ---------- 픽셀 격자', '// ---------- 소품 (역: 스테이션)'),
 ]) + '\n'
 hat = '    if (sg.hat && (pos === 1 || pos === 3)) noise('
 assert s.count(hat) == 1

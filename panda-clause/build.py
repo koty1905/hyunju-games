@@ -54,7 +54,7 @@ def main():
     ensure_fonts()
     page = open(os.path.join(SRC, 'page.html'), encoding='utf-8').read()
     # 공통 → 장면 → 진행 순서로 이어 붙여 한 스크립트로 감싼다
-    game = "'use strict';\n(() => {\n" + '\n'.join(open(os.path.join(SRC, f), encoding='utf-8').read() for f in ('common.js', 'scenes.js', 'engine.js')) + '})();\n'
+    game = "'use strict';\n(() => {\n" + '\n'.join(open(os.path.join(SRC, f), encoding='utf-8').read() for f in ('common.js', 'panda.js', 'scenes.js', 'engine.js')) + '})();\n'
     chars = set(page + game)
     chars |= set(chr(c) for c in range(0x20, 0x7f))
     chars = ''.join(sorted(c for c in chars if c >= ' '))

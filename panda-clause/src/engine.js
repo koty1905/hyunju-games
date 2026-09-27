@@ -1,21 +1,3 @@
-// ---------- 소리 더하기
-Object.assign(SFX, {
-  munch() { noise(.06, { f: 1800, q: 2, v: .14 }); noise(.05, { dt: .09, f: 1400, q: 2, v: .1 }); },
-  crunch() { noise(.08, { f: 2600, q: 4, v: .22 }); tone(320, .05, { v: .06 }); },
-  thud() { tone(90, .28, { w: 'sine', to: 40, v: .6 }); noise(.16, { f: 300, ft: 'lowpass', v: .3 }); },
-  creak() { tone(190, .5, { w: 'sawtooth', to: 120, v: .05 }); },
-  rumble(d) { noise(d, { f: 160, ft: 'lowpass', v: .2 }); },
-  knock() { tone(170, .08, { w: 'sine', v: .45 }); noise(.05, { f: 600, v: .16 }); },
-  cash() { tone(1568, .08, { v: .08 }); tone(2093, .25, { dt: .08, w: 'triangle', v: .1 }); },
-  zzz() { tone(300, .5, { w: 'sine', to: 200, v: .05 }); },
-  sparkle() { ['E6', 'G6', 'B6', 'E7'].forEach((n, i) => tone(hz(n), .15, { dt: i * .06, w: 'triangle', v: .06 })); },
-});
-Object.assign(CH, { D: ['D3', 'A2', ['F#3', 'A3']], Em: ['E3', 'B2', ['G3', 'B3']] });
-function addSong(k, s) { s.lead = s.lead.split(' '); if (s.bars) s.bars = s.bars.split(' '); SONG[k] = s; }
-// 러바오 테마: G장조 5음 음계, 목탁 같은 똑딱
-addSong('bao', { bpm: 104, lead: 'G4 A4 B4 D5 E5 . D5 B4 A4 . G4 A4 B4 . . . D5 E5 G5 E5 D5 B4 A4 . G4 A4 B4 D5 A4 . G4 .', bars: 'G G Em Em C C D G', lw: 'triangle', lv: .08, pad: true, block: true });
-addSong('dusk', { bpm: 66, lead: 'E5 . . D5 B4 . . . A4 . B4 . G4 . . . E5 . . G5 A5 . . . G5 . E5 . D5 . . .', bars: 'C C G G Am Am F G', lw: 'sine', lv: .08, pad: true });
-
 // ---------- 진행
 let MODE = 'title', SI = 0, ST = 0, T = 0, playing = false;
 let toastMsg = '', toastT = 0;

@@ -593,3 +593,33 @@ function anteaterFace(blink) {
     }
   });
 }
+// 사람 모습의 갓파더 (48x140 격자 = 24x70칸)
+function human(f, hold) {
+  return spr('hum' + f + (hold ? 'h' : ''), 48, 140, g => {
+    const skin = '#f1cfae', hair = '#2d2420', card = '#7f8f6a', cardD = '#65744f', pants = '#3c475e', shoe = '#262626', bag = '#d8c7a0';
+    const a = [0, 3, 0, -3][f];
+    gpoly(g, [[18, 92], [24, 92], [24 - a, 133], [18 - a, 133]], pants); gpoly(g, [[25, 92], [31, 92], [31 + a, 133], [25 + a, 133]], pants);
+    grect(g, 16 - a, 133, 9, 5, shoe); grect(g, 24 + a, 133, 10, 5, shoe);
+    grect(g, 6, 70, 14, 20, bag); gline(g, 12, 70, 20, 52, '#a8946a');
+    gpoly(g, [[16, 50], [33, 50], [35, 96], [14, 96]], card); grect(g, 23, 51, 4, 40, '#ece4d2');
+    if (hold) { gpoly(g, [[30, 54], [36, 55], [44, 66], [40, 70]], cardD); grect(g, 38, 60, 10, 12, P.goldD); grect(g, 39, 61, 8, 10, P.gold); gell(g, 42, 68, 3, 3, skin); }
+    else { gpoly(g, [[30, 52], [36, 54], [37, 86], [31, 86]], cardD); gell(g, 34, 88, 3, 3.5, skin); }
+    grect(g, 21, 44, 7, 7, skin);
+    gell(g, 24, 32, 11, 13, skin);
+    gell(g, 23, 26, 12, 9, hair); grect(g, 13, 24, 18, 5, hair); grect(g, 12, 26, 5, 14, hair);
+    gout(g, '#2c2320');
+    grect(g, 26, 29, 7, 1, '#3a3a3a'); grect(g, 26, 29, 1, 6, '#3a3a3a'); grect(g, 32, 29, 1, 6, '#3a3a3a'); grect(g, 26, 34, 7, 1, '#3a3a3a');
+    grect(g, 28, 32, 3, 1, '#2c2320'); grect(g, 28, 36, 3, 1, '#d9ae8f'); grect(g, 29, 41, 3, 1, '#9c5b4a');
+  });
+}
+// 미니게임에서 쓰는 커다란 앞발 (60x40 격자, 발톱이 왼쪽)
+function claw() {
+  return spr('claw', 60, 40, g => {
+    gpoly(g, [[60, 6], [60, 32], [30, 32], [22, 22], [28, 8]], P.fur);
+    gell(g, 26, 20, 10, 11, P.fur);
+    for (let k = 0; k < 3; k++) { const y = 11 + k * 7; gpoly(g, [[20, y], [20, y + 4], [6, y + 9], [3, y + 7], [10, y + 1]], P.claw); }
+    gout(g, P.furO);
+    gtex(g, P.fur, P.furD, P.furL);
+  });
+}
+

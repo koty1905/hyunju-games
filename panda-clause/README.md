@@ -38,7 +38,8 @@ WebAudio로 실시간 합성합니다. 리라네 폴카(「퇴근 불가」 테�
 ## 파일
 
 - `src/common.js` — 화면 맞추기, 색, 글꼴, 소리, 픽셀 격자, 리라·갓파더 그림 (「퇴근 불가」의 `src/game.js`에서 그대로 가져옴)
-- `src/scenes.js` — 러바오 그림, 소품, 방 배경, 장면 11개
+- `src/panda.js` — 러바오 그림, 소품, 더한 소리와 곡 (게임판 `panda-shift`와 함께 쓴다)
+- `src/scenes.js` — 방 배경, 그리기 도우미, 장면 11개
 - `src/engine.js` — 재생 진행, 처음·끝 화면, 입력
 - `src/page.html` — 애니메이션을 감싸는 페이지
 - `sync_common.py` — 게임 쪽 `rira-shift/src/game.js`에서 공통 부분을 `src/common.js`로 다시 옮겨 온다 (리라 그림을 고친 뒤 돌린다)
