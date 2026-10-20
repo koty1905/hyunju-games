@@ -166,9 +166,12 @@ function die(kind) {
   deathAt = performance.now(); deathKind = kind;
 }
 
-function update(dt) {
+function moveLanes(dt) {
   clock += dt;
   for (const l of lanes) for (const it of l.items) it.x = ((it.x + l.speed * dt) % WRAP + WRAP) % WRAP;
+}
+function update(dt) {
+  moveLanes(dt);
   if (deathAt) {
     if (performance.now() - deathAt > 900) {
       lives--;
@@ -231,8 +234,9 @@ function drawTurtles(it, y) {
     ctx.fillRect(cx - 9, cy - 12, 5, 4); ctx.fillRect(cx - 9, cy + 8, 5, 4); ctx.fillRect(cx + 5, cy - 12, 5, 4); ctx.fillRect(cx + 5, cy + 8, 5, 4);
     ctx.fillStyle = sink ? '#6d2a22' : '#d0442f';
     ctx.beginPath(); ctx.ellipse(cx + 1, cy, 11, 10, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = sink ? '#4a1b16' : '#9b2a1c';
-    ctx.fillRect(cx - 3, cy - 6, 8, 2); ctx.fillRect(cx - 3, cy + 4, 8, 2); ctx.fillRect(cx, cy - 6, 2, 12);
+    ctx.strokeStyle = sink ? '#4a1b16' : '#9b2a1c'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(cx + 1, cy, 6, 5.5, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = sink ? '#8a3a30' : '#ef7a5f'; ctx.fillRect(cx - 1, cy - 2, 4, 4);
   }
 }
 function drawVehicle(l, x, y, w) {
@@ -336,6 +340,7 @@ function resize() {
 function frame(t) {
   const dt = Math.min(0.1, (t - last) / 1000); last = t;
   if (state === 'play') update(dt);
+  else if (state === 'ready' || state === 'over') moveLanes(dt);
   draw();
   requestAnimationFrame(frame);
 }

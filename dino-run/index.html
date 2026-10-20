@@ -38,7 +38,7 @@
   </div>
 </main>
 <script>
-const W = 600, H = 150, GROUND = 132, PX = 2;
+const W = innerWidth < 560 ? 480 : 600, H = 150, GROUND = 132, PX = 2;   // 휴대폰에서는 시야를 줄여 그림을 크게
 const FG = '#535353', BG = '#f7f7f7';
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -95,11 +95,20 @@ const BIRD = [
    '#######.#########...', '.......###########..', '........##########..', '........#####.......', '........####........',
    '........###.........', '........##..........'],
 ];
+const spriteCache = new Map();
 function sprite(rows, x, y) {
-  for (let r = 0; r < rows.length; r++) {
-    const row = rows[r];
-    for (let c = 0; c < row.length; c++) if (row[c] === '#') ctx.fillRect(x + c * PX, y + r * PX, PX, PX);
+  const key = rows.join('|') + ctx.fillStyle;
+  let img = spriteCache.get(key);
+  if (!img) {
+    img = document.createElement('canvas');
+    img.width = rows[0].length; img.height = rows.length;
+    const g = img.getContext('2d');
+    g.fillStyle = ctx.fillStyle;
+    rows.forEach((row, r) => { for (let c = 0; c < row.length; c++) if (row[c] === '#') g.fillRect(c, r, 1, 1); });
+    spriteCache.set(key, img);
   }
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, Math.round(x), Math.round(y), img.width * PX, img.height * PX);
 }
 
 const dino = { x: 40, y: 0, vy: 0, duck: false, onGround: true };
