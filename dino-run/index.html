@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>공룡 달리기</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: #f7f7f7; color: #535353; display: flex; flex-direction: column; align-items: center;
+         font: 15px/1.4 "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+         touch-action: manipulation; user-select: none; -webkit-user-select: none; overscroll-behavior: none; }
+  header { width: 100%; max-width: 960px; display: flex; align-items: center; gap: 12px; padding: 10px 16px 8px; }
+  header a { color: #8a8a8a; text-decoration: none; font-size: .85rem; }
+  header a:hover { color: #333; }
+  h1 { font-size: 1.05rem; margin: 0; }
+  main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; padding-bottom: 8vh; }
+  canvas { display: block; touch-action: none; transition: filter .8s ease; cursor: pointer; }
+  canvas.night { filter: invert(1) hue-rotate(180deg); }
+  .keys { color: #8a8a8a; font-size: .8rem; margin: 14px 16px 0; text-align: center; }
+  .touch { display: none; gap: 12px; width: 100%; max-width: 420px; padding: 18px 16px 0; }
+  .touch button { flex: 1; height: 64px; font: inherit; font-size: 1rem; font-weight: 700; color: #535353; background: #e8e8e8;
+                  border: 1px solid #d0d0d0; border-radius: 12px; touch-action: none; }
+  @media (hover: none) and (pointer: coarse) { .touch { display: flex; } .keys { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <a href="../">← 게임 목록</a>
+  <h1>공룡 달리기</h1>
+</header>
+<main>
+  <canvas id="cv" aria-label="공룡 달리기 게임 화면"></canvas>
+  <p class="keys">Space나 ↑로 뛰고, ↓로 몸을 숙입니다. 화면을 눌러도 뜁니다.</p>
+  <div class="touch">
+    <button type="button" id="duckBtn">숙이기</button>
+    <button type="button" id="jumpBtn">점프</button>
+  </div>
+</main>
+<script>
+const W = 600, H = 150, GROUND = 132, PX = 2;
+const FG = '#535353', BG = '#f7f7f7';
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+const cv = $('cv'), ctx = cv.getContext('2d');
+
+// 픽셀 그림 (# = 칠함). 한 칸은 PX(2) 논리 픽셀.
+const DINO_TOP = [
+  '.............########.',
+  '............##.#######',
+  '............##########',
+  '............##########',
+  '............##########',
+  '............#####.....',
+  '............########..',
+  '#..........######.....',
+  '#........########.....',
+  '##.....############...',
+  '###...###########.#...',
+  '#################.....',
+  '.################.....',
+  '..##############......',
+  '...############.......',
+  '....##########........',
+  '.....########.........',
+];
+const DINO_LEGS = [
+  ['......###..###........', '......##....##........', '......#.....#.........', '......##....##........'],
+  ['......###..###........', '......####..##........', '............#.........', '............##........'],
+  ['......###..###........', '......##...####.......', '......#...............', '......##..............'],
+];
+const DUCK_TOP = [
+  '#.......########..#########.',
+  '##....##########.###.#######',
+  '###.########################',
+  '############################',
+  '.###########################',
+  '..##############....######..',
+  '...############.##..........',
+  '....#########.....#.........',
+];
+const DUCK_LEGS = [
+  ['.....###..###...............', '.....##....##...............', '.....#.....#................', '.....##....##...............'],
+  ['.....###..###...............', '.....####..##...............', '...........#................', '...........##...............'],
+  ['.....###..###...............', '.....##...####..............', '.....#......................', '.....##.....................'],
+];
+const BIRD = [
+  ['....#...............', '....##..............', '....###.............', '..##.####...........', '.###..#####.........',
+   '#######.#########...', '.......###########..', '........##########..', '..........#######...', '....................',
+   '....................', '....................'],
+  ['....................', '....................', '....................', '..##................', '.###................',
+   '#######.#########...', '.......###########..', '........##########..', '........#####.......', '........####........',
+   '........###.........', '........##..........'],
+];
+function sprite(rows, x, y) {
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r];
+    for (let c = 0; c < row.length; c++) if (row[c] === '#') ctx.fillRect(x + c * PX, y + r * PX, PX, PX);
+  }
+}
+
+const dino = { x: 40, y: 0, vy: 0, duck: false, onGround: true };
+const DINO_H = (DINO_TOP.length + 4) * PX, DUCK_H = (DUCK_TOP.length + 4) * PX;
+let obstacles = [], clouds = [], bumps = [], speed = 6, distance = 0, score = 0, nextGap = 0, frameNo = 0;
+let state = 'ready', last = performance.now(), overAt = 0, duckHeld = false;
+let best = Number(store.get('dino-run-best')) || 0;
+
+function reset() {
+  dino.y = GROUND - DINO_H; dino.vy = 0; dino.duck = false; dino.onGround = true;
+  obstacles = []; speed = 6; distance = 0; score = 0; nextGap = 320; frameNo = 0;
+  clouds = [{ x: 120, y: 30 }, { x: 380, y: 50 }, { x: 560, y: 22 }];
+  bumps = Array.from({ length: 40 }, () => ({ x: Math.random() * W, y: GROUND + 3 + Math.floor(Math.random() * 10), w: 1 + Math.floor(Math.random() * 3) }));
+  cv.classList.remove('night');
+}
+function start() { reset(); state = 'play'; last = performance.now(); }
+function jump() {
+  if (state === 'ready') { start(); }
+  if (state === 'over') { if (performance.now() - overAt > 400) start(); return; }
+  if (state !== 'play' || !dino.onGround) return;
+  dino.vy = -10.2; dino.onGround = false;
+}
+function setDuck(on) { duckHeld = on; }
+
+function spawnObstacle() {
+  const canBird = score >= 300 && Math.random() < 0.3;
+  if (canBird) {
+    const ys = [GROUND - 30, GROUND - 56, GROUND - 82];
+    obstacles.push({ type: 'bird', x: W + 10, y: ys[Math.floor(Math.random() * 3)], w: 40, h: 24, vx: 0.6 });
+  } else {
+    const big = Math.random() < 0.45, n = 1 + Math.floor(Math.random() * (speed > 8 ? 3 : 2));
+    const cw = big ? 25 : 17, ch = big ? 50 : 35;
+    obstacles.push({ type: 'cactus', big, n, x: W + 10, y: GROUND - ch, w: cw * n, h: ch, cw, vx: 0 });
+  }
+  nextGap = speed * 42 * (0.9 + Math.random() * 0.9);
+}
+
+function dinoBoxes() {
+  if (dino.duck && dino.onGround) return [[dino.x + 2, dino.y + 2, 52, DUCK_H - 6]];
+  return [[dino.x + 26, dino.y + 2, 16, 12], [dino.x + 4, dino.y + 14, 30, DINO_H - 18]];
+}
+function hit(o) {
+  const ox = o.x + 3, oy = o.y + 3, ow = o.w - 6, oh = o.h - 5;
+  return dinoBoxes().some(([x, y, w, h]) => x < ox + ow && x + w > ox && y < oy + oh && y + h > oy);
+}
+
+function update(f) {
+  frameNo += f;
+  speed = Math.min(13, speed + 0.0012 * f);
+  distance += speed * f;
+  const prev = score;
+  score = Math.floor(distance * 0.025);
+  if (Math.floor(score / 700) !== Math.floor(prev / 700)) cv.classList.toggle('night', Math.floor(score / 700) % 2 === 1);
+
+  // 공룡
+  const wasDuck = dino.duck;
+  dino.duck = duckHeld;
+  if (!dino.onGround) {
+    dino.vy += (duckHeld ? 1.8 : 0.6) * f;
+    dino.y += dino.vy * f;
+    if (dino.y >= GROUND - DINO_H) { dino.y = GROUND - DINO_H; dino.vy = 0; dino.onGround = true; }
+  }
+  if (dino.onGround) dino.y = GROUND - (dino.duck ? DUCK_H : DINO_H);
+  else if (wasDuck !== dino.duck) {}  // 공중에서는 높이 그대로
+
+  // 장애물
+  for (const o of obstacles) o.x -= (speed + o.vx) * f;
+  obstacles = obstacles.filter((o) => o.x + o.w > -20);
+  const lastObs = obstacles[obstacles.length - 1];
+  if (!lastObs || W - (lastObs.x + lastObs.w) > nextGap) spawnObstacle();
+  if (obstacles.some(hit)) {
+    state = 'over'; overAt = performance.now();
+    if (score > best) { best = score; store.set('dino-run-best', best); }
+  }
+
+  // 배경
+  for (const c of clouds) { c.x -= speed * 0.15 * f; if (c.x < -50) { c.x = W + Math.random() * 200; c.y = 15 + Math.random() * 45; } }
+  for (const b of bumps) { b.x -= speed * f; if (b.x < -4) { b.x += W + 8; b.y = GROUND + 3 + Math.floor(Math.random() * 10); } }
+}
+
+function drawCactus(o) {
+  const s = o.big ? 1.45 : 1;
+  for (let i = 0; i < o.n; i++) {
+    const x = o.x + i * o.cw, y = o.y, h = o.h;
+    ctx.fillRect(x + 6 * s, y, 5 * s, h);                                  // 줄기
+    ctx.fillRect(x + 1 * s, y + 9 * s, 3 * s, 11 * s); ctx.fillRect(x + 1 * s, y + 18 * s, 6 * s, 3 * s);   // 왼팔
+    ctx.fillRect(x + 13 * s, y + 5 * s, 3 * s, 10 * s); ctx.fillRect(x + 10 * s, y + 13 * s, 6 * s, 3 * s); // 오른팔
+  }
+}
+function drawCloud(c) {
+  ctx.fillStyle = '#d6d6d6';
+  ctx.fillRect(c.x + 8, c.y, 20, 2); ctx.fillRect(c.x + 4, c.y + 2, 30, 2); ctx.fillRect(c.x, c.y + 4, 46, 6);
+  ctx.fillStyle = BG; ctx.fillRect(c.x + 2, c.y + 6, 42, 2);
+  ctx.fillStyle = '#d6d6d6'; ctx.fillRect(c.x, c.y + 8, 46, 2);
+  ctx.fillStyle = FG;
+}
+function pad5(n) { return String(n).padStart(5, '0'); }
+function draw() {
+  ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+  for (const c of clouds) drawCloud(c);
+  ctx.fillStyle = FG;
+  ctx.fillRect(0, GROUND, W, 1);
+  for (const b of bumps) ctx.fillRect(Math.round(b.x), b.y, b.w, 1);
+
+  for (const o of obstacles) {
+    if (o.type === 'cactus') drawCactus(o);
+    else sprite(BIRD[Math.floor(frameNo / 10) % 2], o.x, o.y);
+  }
+
+  const legFrame = state !== 'play' || !dino.onGround ? 0 : 1 + Math.floor(frameNo / 6) % 2;
+  if (dino.duck && dino.onGround && state === 'play') {
+    sprite(DUCK_TOP, dino.x, dino.y); sprite(DUCK_LEGS[legFrame], dino.x, dino.y + DUCK_TOP.length * PX);
+  } else {
+    sprite(DINO_TOP, dino.x, dino.y); sprite(DINO_LEGS[legFrame], dino.x, dino.y + DINO_TOP.length * PX);
+    if (state === 'over') {                                   // 놀란 눈
+      ctx.fillStyle = BG; ctx.fillRect(dino.x + 28, dino.y + 2, 6, 6);
+      ctx.fillStyle = FG; ctx.fillRect(dino.x + 30, dino.y + 4, 2, 2);
+    }
+  }
+
+  ctx.font = '13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  const flash = state === 'play' && score >= 100 && score % 100 < 6 && Math.floor(frameNo / 8) % 2 === 0;
+  ctx.fillStyle = '#8a8a8a';
+  ctx.fillText('HI ' + pad5(Math.max(best, score)), W - 74, 10);
+  ctx.fillStyle = FG;
+  if (!flash) ctx.fillText(pad5(score), W - 10, 10);
+
+  ctx.textAlign = 'center';
+  if (state === 'ready') {
+    ctx.font = '14px "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
+    ctx.fillText(matchMedia('(pointer: coarse)').matches ? '화면을 누르면 시작' : 'Space를 누르면 시작', W / 2, 52);
+  } else if (state === 'over') {
+    ctx.font = 'bold 18px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+    ctx.fillText('G A M E   O V E R', W / 2, 46);
+    // 다시 하기 아이콘
+    const x = W / 2 - 14, y = 76;
+    ctx.fillRect(x, y, 28, 24); ctx.fillStyle = BG; ctx.fillRect(x + 2, y + 2, 24, 20); ctx.fillStyle = FG;
+    ctx.beginPath(); ctx.arc(W / 2, y + 12, 6, Math.PI * 0.2, Math.PI * 1.8); ctx.lineWidth = 2; ctx.strokeStyle = FG; ctx.stroke();
+    ctx.fillRect(W / 2 + 3, y + 3, 5, 5);
+  }
+  ctx.textAlign = 'left';
+}
+
+function resize() {
+  const s = Math.min((innerWidth - 24) / W, 1.6);
+  const dpr = window.devicePixelRatio || 1;
+  cv.style.width = Math.round(W * s) + 'px'; cv.style.height = Math.round(H * s) + 'px';
+  cv.width = Math.round(W * s * dpr); cv.height = Math.round(H * s * dpr);
+  ctx.setTransform(s * dpr, 0, 0, s * dpr, 0, 0);
+  draw();
+}
+function frame(t) {
+  const f = Math.min(3, (t - last) / (1000 / 60)); last = t;
+  if (state === 'play') update(f);
+  draw();
+  requestAnimationFrame(frame);
+}
+
+addEventListener('keydown', (e) => {
+  if ([' ', 'ArrowUp', 'ArrowDown', 'w', 's'].includes(e.key)) e.preventDefault();
+  if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w') { if (!e.repeat) jump(); }
+  else if (e.key === 'ArrowDown' || e.key === 's') setDuck(true);
+});
+addEventListener('keyup', (e) => { if (e.key === 'ArrowDown' || e.key === 's') setDuck(false); });
+cv.addEventListener('pointerdown', (e) => { e.preventDefault(); jump(); });
+$('jumpBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); jump(); });
+const duckBtn = $('duckBtn');
+duckBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); if (state === 'play') setDuck(true); });
+['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => duckBtn.addEventListener(ev, () => setDuck(false)));
+document.addEventListener('visibilitychange', () => { if (document.hidden) setDuck(false); });
+addEventListener('resize', resize);
+
+reset(); resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

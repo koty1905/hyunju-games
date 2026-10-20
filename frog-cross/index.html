@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>개구리 건너기</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: #000; color: #ddd; display: flex; flex-direction: column; align-items: center;
+         font: 15px/1.4 "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+         touch-action: manipulation; user-select: none; -webkit-user-select: none; overscroll-behavior: none; }
+  header { width: 100%; max-width: 560px; display: flex; align-items: center; gap: 12px; padding: 10px 16px 8px; }
+  header a { color: #9a9a9a; text-decoration: none; font-size: .85rem; }
+  header a:hover { color: #fff; }
+  h1 { font-size: 1.05rem; margin: 0; }
+  header button { margin-left: auto; }
+  .screen { position: relative; }
+  canvas { display: block; touch-action: none; }
+  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+             gap: 10px; text-align: center; padding: 16px; background: rgba(0, 0, 0, .8); }
+  .overlay[hidden] { display: none; }
+  .overlay h2 { margin: 0; font: 700 1.6rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .1em; color: #ffd84a; }
+  .overlay p { margin: 0; color: #bbb; font-size: .9rem; }
+  button { font: inherit; font-size: .85rem; color: #ddd; background: #1c1c1c; border: 1px solid #444; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  .overlay button { background: #3ddc3d; border-color: #3ddc3d; color: #062006; font-weight: 700; font-size: 1rem; padding: 9px 22px; }
+  .keys { color: #8e8e8e; font-size: .8rem; margin: 10px 0 0; text-align: center; }
+  .pad { display: none; grid-template-columns: repeat(3, 64px); grid-template-rows: repeat(2, 52px); gap: 6px; margin-top: 10px; }
+  .pad button { font-size: 1.3rem; touch-action: none; padding: 0; }
+  .pad [data-dir=up] { grid-area: 1 / 2; } .pad [data-dir=left] { grid-area: 2 / 1; }
+  .pad [data-dir=down] { grid-area: 2 / 2; } .pad [data-dir=right] { grid-area: 2 / 3; }
+  @media (hover: none) and (pointer: coarse) { .pad { display: grid; } .keys { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <a href="../">← 게임 목록</a>
+  <h1>개구리 건너기</h1>
+  <button id="pauseBtn" type="button">멈춤</button>
+</header>
+<div class="screen">
+  <canvas id="cv"></canvas>
+  <div class="overlay" id="overlay">
+    <h2 id="ovTitle">FROG CROSSING</h2>
+    <p id="ovText">찻길을 건너고 통나무와 거북이를 밟아 강을 건너<br>맨 위 다섯 칸의 집에 개구리를 모두 들여보내세요.</p>
+    <button id="ovBtn" type="button">시작</button>
+  </div>
+</div>
+<p class="keys">방향키(WASD)로 한 칸씩 뜁니다. P는 멈춤.</p>
+<div class="pad">
+  <button type="button" data-dir="up" aria-label="위">▲</button>
+  <button type="button" data-dir="left" aria-label="왼쪽">◀</button>
+  <button type="button" data-dir="down" aria-label="아래">▼</button>
+  <button type="button" data-dir="right" aria-label="오른쪽">▶</button>
+</div>
+<script>
+const T = 32, COLS = 15, ROWS = 13, W = COLS * T, HUD = 32, H = HUD + ROWS * T + 32;
+const WRAP = W + 4 * T;                          // 차·통나무가 화면 밖을 돌아 나오는 길이
+const HOMES = [1, 4, 7, 10, 13];                 // 집이 있는 열
+const TIME_LIMIT = 30;
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+const cv = $('cv'), ctx = cv.getContext('2d');
+
+// 줄 정의: row(0=맨 위), kind, speed(px/초, +는 오른쪽), len(칸), at(시작 칸)
+const LANES = [
+  { row: 1, kind: 'log', speed: 45, len: 4, at: [0, 7, 14] },
+  { row: 2, kind: 'turtle', speed: -55, len: 2, at: [0, 4, 8, 12, 16], dive: [2] },
+  { row: 3, kind: 'log', speed: 75, len: 6, at: [0, 10] },
+  { row: 4, kind: 'log', speed: 35, len: 3, at: [1, 7, 13] },
+  { row: 5, kind: 'turtle', speed: -45, len: 3, at: [0, 5, 10, 15], dive: [1] },
+  { row: 7, kind: 'truck', speed: -40, len: 2, at: [0, 7, 13] },
+  { row: 8, kind: 'racer', speed: 120, len: 1, at: [3, 13] },
+  { row: 9, kind: 'car', color: '#ff6fb1', speed: -65, len: 1, at: [1, 7, 13] },
+  { row: 10, kind: 'tractor', speed: 45, len: 1, at: [2, 8, 14] },
+  { row: 11, kind: 'car', color: '#ffd84a', speed: -50, len: 1, at: [0, 5, 10, 15] },
+];
+const FROG = [
+  '#.oo....oo.#',
+  '##.######.##',
+  '.##########.',
+  '..########..',
+  '..########..',
+  '.##########.',
+  '############',
+  '#.########.#',
+  '#..######..#',
+  '##..####..##',
+  '.#........#.',
+];
+
+let lanes, frog, homes, score, lives, level, timeLeft, maxRow, deathAt, deathKind, hopAt, msg = null;
+let state = 'ready', last = performance.now(), clock = 0;
+let best = Number(store.get('frog-cross-best')) || 0;
+
+function buildLanes() {
+  const k = 1 + (level - 1) * 0.12;
+  lanes = LANES.map((l) => ({
+    ...l, speed: l.speed * k,
+    items: l.at.map((c, i) => ({ x: c * T, w: l.len * T, dive: !!(l.dive && l.dive.includes(i)) })),
+  }));
+}
+function resetFrog() {
+  frog = { x: 7 * T, row: 12, face: 0 }; timeLeft = TIME_LIMIT; maxRow = 12; deathAt = 0; hopAt = -1;
+}
+function start() {
+  score = 0; lives = 3; level = 1; homes = [false, false, false, false, false];
+  buildLanes(); resetFrog();
+  state = 'play'; $('overlay').hidden = true; last = performance.now();
+}
+function showOverlay(title, text, btn) {
+  $('ovTitle').textContent = title; $('ovText').textContent = text; $('ovBtn').textContent = btn;
+  $('overlay').hidden = false;
+}
+function togglePause() {
+  if (state === 'play') { state = 'pause'; showOverlay('PAUSE', '', '계속'); }
+  else if (state === 'pause') { state = 'play'; $('overlay').hidden = true; last = performance.now(); }
+}
+function gameOver() {
+  state = 'over';
+  if (score > best) { best = score; store.set('frog-cross-best', best); }
+  showOverlay('GAME OVER', `점수 ${score} · ${level}판`, '다시 하기');
+}
+
+// 거북이 잠수 주기: 4초 떠 있음 → 0.6초 가라앉는 중 → 1.4초 물속 → 0.6초 떠오름
+function diveState(t) {
+  const p = (t + 1.3) % 6.6;
+  if (p < 4) return 'up';
+  if (p < 4.6) return 'sinking';
+  if (p < 6) return 'under';
+  return 'sinking';
+}
+function itemScreenX(it) { return it.x - 2 * T; }
+function laneAt(row) { return lanes.find((l) => l.row === row); }
+
+function hop(name) {
+  if (state !== 'play' || deathAt) return;
+  const now = performance.now();
+  if (now - hopAt < 110) return;
+  hopAt = now;
+  if (name === 'up' && frog.row > 0) { frog.row--; frog.face = 0; }
+  else if (name === 'down' && frog.row < 12) { frog.row++; frog.face = 2; }
+  else if (name === 'left') { frog.x = Math.max(0, frog.x - T); frog.face = 3; }
+  else if (name === 'right') { frog.x = Math.min(W - T, frog.x + T); frog.face = 1; }
+  else return;
+  if (frog.row < maxRow) { maxRow = frog.row; score += 10; }
+  if (frog.row === 0) reachHome();
+}
+function reachHome() {
+  const cx = frog.x + T / 2;
+  const i = HOMES.findIndex((c) => Math.abs(cx - (c * T + T / 2)) < 20);
+  if (i < 0 || homes[i]) { die('splat'); return; }
+  homes[i] = true;
+  score += 50 + 10 * Math.floor(timeLeft);
+  if (homes.every(Boolean)) {
+    score += 1000; level++; homes = [false, false, false, false, false]; buildLanes();
+    msg = { text: `${level}판!`, until: performance.now() + 1500 };
+  }
+  resetFrog();
+}
+function die(kind) {
+  if (deathAt) return;
+  deathAt = performance.now(); deathKind = kind;
+}
+
+function update(dt) {
+  clock += dt;
+  for (const l of lanes) for (const it of l.items) it.x = ((it.x + l.speed * dt) % WRAP + WRAP) % WRAP;
+  if (deathAt) {
+    if (performance.now() - deathAt > 900) {
+      lives--;
+      if (lives <= 0) { gameOver(); return; }
+      resetFrog();
+    }
+    return;
+  }
+  timeLeft -= dt;
+  if (timeLeft <= 0) { die('splat'); return; }
+  const lane = laneAt(frog.row);
+  if (!lane) return;
+  const fx = frog.x + 6, fw = T - 12, cx = frog.x + T / 2;
+  if (lane.row >= 7) {
+    for (const it of lane.items) {
+      const x = itemScreenX(it);
+      if (fx < x + it.w - 3 && fx + fw > x + 3) { die('splat'); return; }
+    }
+  } else {
+    const ride = lane.items.find((it) => {
+      const x = itemScreenX(it);
+      if (cx < x + 2 || cx > x + it.w - 2) return false;
+      return !(it.dive && diveState(clock) === 'under');
+    });
+    if (!ride) { die('splash'); return; }
+    frog.x += lane.speed * dt;
+    if (frog.x < -T / 2 || frog.x > W - T / 2) die('splash');
+  }
+}
+
+// 그리기
+function fillPixels(rows, x, y, s, colors) {
+  for (let r = 0; r < rows.length; r++) for (let c = 0; c < rows[r].length; c++) {
+    const ch = rows[r][c];
+    if (ch === '.') continue;
+    ctx.fillStyle = colors[ch]; ctx.fillRect(x + c * s, y + r * s, s, s);
+  }
+}
+function drawFrog(x, y, face, scale = 1) {
+  ctx.save();
+  ctx.translate(x + T / 2, y + T / 2); ctx.rotate(face * Math.PI / 2); ctx.scale(scale, scale);
+  fillPixels(FROG, -12, -11, 2, { '#': '#3ddc3d', o: '#f4f19a' });
+  ctx.restore();
+}
+function drawLog(x, y, w) {
+  ctx.fillStyle = '#8b5a2b'; ctx.fillRect(x + 2, y + 5, w - 4, T - 10);
+  ctx.fillStyle = '#a97440'; ctx.fillRect(x + 2, y + 7, w - 4, 4);
+  ctx.fillStyle = '#5e3b1a'; ctx.fillRect(x + 2, y + T - 9, w - 4, 3);
+  ctx.fillStyle = '#c99a62'; ctx.fillRect(x + 2, y + 5, 5, T - 10); ctx.fillRect(x + w - 7, y + 5, 5, T - 10);
+  ctx.fillStyle = '#8b5a2b'; ctx.fillRect(x + 3, y + 10, 3, T - 20); ctx.fillRect(x + w - 6, y + 10, 3, T - 20);
+}
+function drawTurtles(it, y) {
+  const st = it.dive ? diveState(clock) : 'up';
+  if (st === 'under') return;
+  const n = it.w / T, x0 = itemScreenX(it), sink = st === 'sinking';
+  for (let i = 0; i < n; i++) {
+    const cx = x0 + i * T + T / 2, cy = y + T / 2;
+    ctx.fillStyle = sink ? '#2f6b2f' : '#3aa53a';
+    ctx.fillRect(cx - 14, cy - 3, 4, 6);                                     // 머리
+    ctx.fillRect(cx - 9, cy - 12, 5, 4); ctx.fillRect(cx - 9, cy + 8, 5, 4); ctx.fillRect(cx + 5, cy - 12, 5, 4); ctx.fillRect(cx + 5, cy + 8, 5, 4);
+    ctx.fillStyle = sink ? '#6d2a22' : '#d0442f';
+    ctx.beginPath(); ctx.ellipse(cx + 1, cy, 11, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = sink ? '#4a1b16' : '#9b2a1c';
+    ctx.fillRect(cx - 3, cy - 6, 8, 2); ctx.fillRect(cx - 3, cy + 4, 8, 2); ctx.fillRect(cx, cy - 6, 2, 12);
+  }
+}
+function drawVehicle(l, x, y, w) {
+  const left = l.speed < 0;
+  if (l.kind === 'truck') {
+    ctx.fillStyle = '#e8e8e8'; ctx.fillRect(x + (left ? 14 : 2), y + 6, w - 16, T - 12);
+    ctx.fillStyle = '#c84848'; ctx.fillRect(left ? x + 2 : x + w - 14, y + 8, 12, T - 16);
+    ctx.fillStyle = '#9ad'; ctx.fillRect(left ? x + 3 : x + w - 7, y + 10, 4, T - 20);
+  } else if (l.kind === 'racer') {
+    ctx.fillStyle = '#f2f2f2'; ctx.fillRect(x + 3, y + 9, w - 6, T - 18);
+    ctx.fillStyle = '#d33'; ctx.fillRect(x + 12, y + 11, 8, T - 22);
+    ctx.fillStyle = '#222'; ctx.fillRect(x + 4, y + 5, 7, 4); ctx.fillRect(x + 21, y + 5, 7, 4); ctx.fillRect(x + 4, y + T - 9, 7, 4); ctx.fillRect(x + 21, y + T - 9, 7, 4);
+    return;
+  } else if (l.kind === 'tractor') {
+    ctx.fillStyle = '#3aa53a'; ctx.fillRect(x + 6, y + 9, w - 12, T - 18);
+    ctx.fillStyle = '#e8e8e8'; ctx.fillRect(x + (left ? 7 : 15), y + 11, 9, T - 22);
+    ctx.fillStyle = '#222'; ctx.fillRect(x + 4, y + 4, 9, 6); ctx.fillRect(x + 4, y + T - 10, 9, 6); ctx.fillRect(x + 21, y + 6, 7, 4); ctx.fillRect(x + 21, y + T - 10, 7, 4);
+    return;
+  } else {
+    ctx.fillStyle = l.color; ctx.fillRect(x + 3, y + 8, w - 6, T - 16);
+    ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(x + (left ? 7 : w - 15), y + 10, 8, T - 20);
+  }
+  ctx.fillStyle = '#222';
+  ctx.fillRect(x + 5, y + 4, 7, 4); ctx.fillRect(x + w - 12, y + 4, 7, 4); ctx.fillRect(x + 5, y + T - 8, 7, 4); ctx.fillRect(x + w - 12, y + T - 8, 7, 4);
+}
+function rowY(r) { return HUD + r * T; }
+function pad(n, k = 5) { return String(n).padStart(k, '0'); }
+function draw() {
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  // 강·안전지대·도로
+  ctx.fillStyle = '#00104a'; ctx.fillRect(0, rowY(0), W, 6 * T);
+  for (const r of [6, 12]) {
+    ctx.fillStyle = '#5b2d8c'; ctx.fillRect(0, rowY(r), W, T);
+    ctx.fillStyle = '#7a45b5'; for (let x = 0; x < W; x += 16) ctx.fillRect(x + ((x / 16) % 2) * 8, rowY(r) + 4, 6, 6), ctx.fillRect(x + 8 - ((x / 16) % 2) * 8, rowY(r) + 20, 6, 6);
+  }
+  ctx.fillStyle = '#333';
+  for (let r = 8; r <= 11; r++) for (let x = 6; x < W; x += 32) ctx.fillRect(x, rowY(r) - 1, 16, 2);
+  // 집 줄
+  ctx.fillStyle = '#0d7a35'; ctx.fillRect(0, rowY(0), W, T);
+  ctx.fillStyle = '#0a5c28'; for (let x = 0; x < W; x += 8) ctx.fillRect(x, rowY(0) + ((x / 8) % 3) * 8 + 4, 4, 4);
+  HOMES.forEach((c, i) => {
+    ctx.fillStyle = '#00104a'; ctx.fillRect(c * T - 4, rowY(0) + 6, T + 8, T - 6);
+    if (homes && homes[i]) drawFrog(c * T, rowY(0) + 2, 2);
+  });
+  // 통나무·거북이·차
+  if (lanes) for (const l of lanes) {
+    const y = rowY(l.row);
+    for (const it of l.items) {
+      const x = itemScreenX(it);
+      if (x > W || x + it.w < 0) continue;
+      if (l.kind === 'log') drawLog(x, y, it.w);
+      else if (l.kind === 'turtle') drawTurtles(it, y);
+      else drawVehicle(l, x, y, it.w);
+    }
+  }
+  // 개구리
+  if (frog && (state === 'play' || state === 'pause')) {
+    if (deathAt) {
+      const cx = frog.x + T / 2, cy = rowY(frog.row) + T / 2;
+      ctx.strokeStyle = deathKind === 'splash' ? '#7fd4ff' : '#ff5a5a'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx, cy, 11, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx - 6, cy - 6); ctx.lineTo(cx + 6, cy + 6); ctx.moveTo(cx + 6, cy - 6); ctx.lineTo(cx - 6, cy + 6); ctx.stroke();
+    } else {
+      const hopping = performance.now() - hopAt < 90;
+      drawFrog(frog.x, rowY(frog.row), frog.face, hopping ? 1.15 : 1);
+    }
+  }
+  // 위 점수판
+  ctx.font = 'bold 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText('SCORE', 12, 16);
+  ctx.fillStyle = '#ff5a5a'; ctx.fillText(pad(score || 0), 70, 16);
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'right'; ctx.fillText('HI', W - 70, 16);
+  ctx.fillStyle = '#ff5a5a'; ctx.fillText(pad(Math.max(best, score || 0)), W - 12, 16);
+  // 아래: 남은 개구리와 시간
+  const by = rowY(ROWS);
+  for (let i = 0; i < Math.max(0, (lives || 0) - 1); i++) fillPixels(FROG, 10 + i * 20, by + 9, 1.4, { '#': '#3ddc3d', o: '#f4f19a' });
+  ctx.fillStyle = '#ffd84a'; ctx.textAlign = 'left'; ctx.fillText(`${level || 1}판`, 80, by + 16);
+  if (frog) {
+    const bw = Math.max(0, timeLeft) / TIME_LIMIT * 200;
+    ctx.fillStyle = timeLeft < 8 ? '#ff5a5a' : '#3ddc3d'; ctx.fillRect(W - 60 - bw, by + 10, bw, 12);
+  }
+  ctx.fillStyle = '#ffd84a'; ctx.textAlign = 'right'; ctx.fillText('TIME', W - 10, by + 16);
+  if (msg && performance.now() < msg.until) {
+    ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(W / 2 - 80, rowY(6) - 4, 160, T + 8);
+    ctx.fillStyle = '#ffd84a'; ctx.textAlign = 'center'; ctx.font = 'bold 20px "Pretendard", "Apple SD Gothic Neo", sans-serif';
+    ctx.fillText(msg.text, W / 2, rowY(6) + T / 2);
+  }
+  ctx.textAlign = 'left';
+}
+
+function resize() {
+  const header = document.querySelector('header').offsetHeight;
+  const below = matchMedia('(hover: none) and (pointer: coarse)').matches ? 130 : 42;
+  const s = Math.min((innerWidth - 16) / W, (innerHeight - header - below) / H, 1.6);
+  const dpr = window.devicePixelRatio || 1;
+  cv.style.width = Math.round(W * s) + 'px'; cv.style.height = Math.round(H * s) + 'px';
+  cv.width = Math.round(W * s * dpr); cv.height = Math.round(H * s * dpr);
+  ctx.setTransform(s * dpr, 0, 0, s * dpr, 0, 0);
+  draw();
+}
+function frame(t) {
+  const dt = Math.min(0.1, (t - last) / 1000); last = t;
+  if (state === 'play') update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+
+const KEYS = { ArrowUp: 'up', w: 'up', ArrowDown: 'down', s: 'down', ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right' };
+addEventListener('keydown', (e) => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (k in KEYS || k === ' ' || k === 'Enter') e.preventDefault();
+  if (k === 'p' || k === 'Escape') { togglePause(); return; }
+  if ((k === ' ' || k === 'Enter') && state !== 'play') { if (state === 'pause') togglePause(); else start(); return; }
+  if (KEYS[k]) hop(KEYS[k]);
+});
+let sx = null, sy = null;
+cv.addEventListener('pointerdown', (e) => { sx = e.clientX; sy = e.clientY; });
+cv.addEventListener('pointerup', (e) => {
+  if (sx === null) return;
+  const dx = e.clientX - sx, dy = e.clientY - sy; sx = null;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) { hop('up'); return; }
+  hop(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+});
+document.querySelectorAll('.pad button').forEach((b) => b.addEventListener('pointerdown', (e) => { e.preventDefault(); hop(b.dataset.dir); }));
+$('ovBtn').addEventListener('click', () => { if (state === 'pause') togglePause(); else start(); });
+$('pauseBtn').addEventListener('click', togglePause);
+document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') togglePause(); });
+addEventListener('resize', resize);
+
+level = 1; buildLanes(); resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

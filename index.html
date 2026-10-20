@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>픽셀 게임</title>
+<title>게임</title>
 <style>
   :root { --bg: #faf9f6; --fg: #1f1d1a; --muted: #6b665e; --line: #e2ded6; --card: #fff; --accent: #c4623f; }
   @media (prefers-color-scheme: dark) {
@@ -13,6 +13,7 @@
          font: 17px/1.6 "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif; }
   main { max-width: 640px; margin: 0 auto; padding: 40px 16px; }
   h1 { font-size: 1.4rem; margin: 0 0 24px; }
+  h2 { font-size: 1rem; color: var(--muted); margin: 28px 0 12px; font-weight: 600; }
   a.card { display: block; padding: 16px 18px; margin-bottom: 12px; border: 1px solid var(--line);
            border-radius: 12px; background: var(--card); color: inherit; text-decoration: none; }
   a.card:hover { border-color: var(--accent); }
@@ -22,7 +23,15 @@
 </head>
 <body>
 <main>
-  <h1>픽셀 게임</h1>
+  <h1>게임</h1>
+  <h2>고전 게임</h2>
+  <a class="card" href="block-stack/"><strong>블록 쌓기</strong><span>떨어지는 블록으로 가로줄을 채워 지우기</span></a>
+  <a class="card" href="snake/"><strong>뱀 게임</strong><span>먹이를 먹을수록 길어지는 뱀</span></a>
+  <a class="card" href="brick-breaker/"><strong>벽돌 깨기</strong><span>공을 받아 쳐서 벽돌 모두 깨기</span></a>
+  <a class="card" href="2048/"><strong>2048</strong><span>같은 숫자를 합쳐 2048 만들기</span></a>
+  <a class="card" href="dino-run/"><strong>공룡 달리기</strong><span>선인장과 새를 피해 끝없이 달리기</span></a>
+  <a class="card" href="frog-cross/"><strong>개구리 건너기</strong><span>찻길과 강을 건너 개구리를 집에 들여보내기</span></a>
+  <h2>픽셀 게임</h2>
   <a class="card" href="lulu-land/"><strong>룰루랜드</strong><span>탕후루 먹방 픽셀 게임</span></a>
   <a class="card" href="rira-shift/"><strong>퇴근 불가</strong><span>리라네 근무표 픽셀 게임</span></a>
   <a class="card" href="panda-clause/"><strong>판다 면제 조항</strong><span>러바오가 나오는 리라 에피소드 2 픽셀 애니메이션</span></a>
