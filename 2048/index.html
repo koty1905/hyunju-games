@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2048</title>
+<style>
+  :root {
+    --size: min(460px, calc(100vw - 32px), calc(100vh - 210px));
+    --gap: calc(var(--size) * 0.03);
+    --tile: calc((var(--size) - 5 * var(--gap)) / 4);
+  }
+  @supports (height: 100svh) { :root { --size: min(460px, calc(100vw - 32px), calc(100svh - 210px)); } }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: #faf8ef; color: #776e65; display: flex; flex-direction: column; align-items: center;
+         font: 16px/1.4 "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Helvetica Neue", Arial, sans-serif;
+         touch-action: manipulation; user-select: none; -webkit-user-select: none; overscroll-behavior: none; }
+  .wrap { width: var(--size); padding: 10px 0 24px; }
+  nav a { color: #9f948a; text-decoration: none; font-size: .85rem; }
+  nav a:hover { color: #776e65; }
+  .top { display: flex; align-items: center; gap: 8px; margin: 8px 0 10px; }
+  h1 { font-size: clamp(2.4rem, 11vw, 3.6rem); line-height: 1; margin: 0 auto 0 0; font-weight: 800; }
+  .scorebox { background: #bbada0; color: #fff; border-radius: 6px; padding: 5px 12px; text-align: center; min-width: 64px; }
+  .scorebox small { display: block; font-size: .7rem; color: #eee4da; font-weight: 700; letter-spacing: .06em; }
+  .scorebox b { font-size: 1.15rem; }
+  .sub { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: .92rem; }
+  .sub p { margin: 0 auto 0 0; }
+  button { font: inherit; font-weight: 700; color: #f9f6f2; background: #8f7a66; border: none; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+  .board { position: relative; width: var(--size); height: var(--size); background: #bbada0; border-radius: 8px; touch-action: none; }
+  .cell, .tile { position: absolute; left: var(--gap); top: var(--gap); width: var(--tile); height: var(--tile); border-radius: 5px;
+                 transform: translate(calc(var(--c) * (var(--tile) + var(--gap))), calc(var(--r) * (var(--tile) + var(--gap)))); }
+  .cell { background: rgba(238, 228, 218, .35); }
+  .tile { display: flex; align-items: center; justify-content: center; font-weight: 800; transition: transform 100ms ease-in-out;
+          font-size: calc(var(--tile) * .46); background: #eee4da; color: #776e65; z-index: 1; }
+  .tile.d3 { font-size: calc(var(--tile) * .38); } .tile.d4 { font-size: calc(var(--tile) * .3); } .tile.d5 { font-size: calc(var(--tile) * .24); }
+  .tile.v4 { background: #ede0c8; }
+  .tile.v8 { background: #f2b179; color: #f9f6f2; } .tile.v16 { background: #f59563; color: #f9f6f2; }
+  .tile.v32 { background: #f67c5f; color: #f9f6f2; } .tile.v64 { background: #f65e3b; color: #f9f6f2; }
+  .tile.v128 { background: #edcf72; color: #f9f6f2; box-shadow: 0 0 18px rgba(243, 215, 116, .25); }
+  .tile.v256 { background: #edcc61; color: #f9f6f2; box-shadow: 0 0 18px rgba(243, 215, 116, .32); }
+  .tile.v512 { background: #edc850; color: #f9f6f2; box-shadow: 0 0 18px rgba(243, 215, 116, .4); }
+  .tile.v1024 { background: #edc53f; color: #f9f6f2; box-shadow: 0 0 18px rgba(243, 215, 116, .48); }
+  .tile.v2048 { background: #edc22e; color: #f9f6f2; box-shadow: 0 0 22px rgba(243, 215, 116, .56); }
+  .tile.super { background: #3c3a32; color: #f9f6f2; }
+  .tile.dead { z-index: 0; }
+  .tile.new { animation: appear 160ms ease 90ms backwards; }
+  .tile.pop { animation: pop 180ms ease; z-index: 2; }
+  @keyframes appear { from { opacity: 0; scale: 0; } to { opacity: 1; scale: 1; } }
+  @keyframes pop { 0% { scale: 1; } 50% { scale: 1.18; } 100% { scale: 1; } }
+  .overlay { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center;
+             gap: 14px; border-radius: 8px; background: rgba(238, 228, 218, .74); text-align: center; animation: fade 400ms ease; }
+  .overlay.win { background: rgba(237, 194, 46, .55); color: #f9f6f2; }
+  .overlay[hidden] { display: none; }
+  .overlay h2 { margin: 0; font-size: clamp(1.8rem, 9vw, 2.8rem); font-weight: 800; }
+  .overlay div { display: flex; gap: 8px; }
+  @keyframes fade { from { opacity: 0; } }
+  .help { font-size: .85rem; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav><a href="../">← 게임 목록</a></nav>
+  <div class="top">
+    <h1>2048</h1>
+    <div class="scorebox"><small>점수</small><b id="score">0</b></div>
+    <div class="scorebox"><small>최고</small><b id="best">0</b></div>
+  </div>
+  <div class="sub">
+    <p>같은 숫자를 합쳐 <b>2048</b>을 만드세요.</p>
+    <button id="newBtn" type="button">새 게임</button>
+  </div>
+  <div class="board" id="board">
+    <div class="overlay" id="overlay" hidden>
+      <h2 id="ovTitle">게임 끝</h2>
+      <div><button id="contBtn" type="button">계속하기</button><button id="againBtn" type="button">다시 하기</button></div>
+    </div>
+  </div>
+  <p class="help">방향키나 WASD로 모든 타일을 한쪽으로 밉니다. 휴대폰에서는 판을 손가락으로 밀면 됩니다.</p>
+</div>
+<script>
+const N = 4;
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+const boardEl = $('board');
+let grid, score, won, keepGoing, over, pending = null;
+let best = Number(store.get('2048-best')) || 0;
+
+for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+  const d = document.createElement('div'); d.className = 'cell';
+  d.style.setProperty('--r', r); d.style.setProperty('--c', c); boardEl.appendChild(d);
+}
+
+function makeTile(v, r, c, cls) {
+  const el = document.createElement('div');
+  const t = { v, r, c, el };
+  paint(t); place(t);
+  if (cls) el.classList.add(cls);
+  boardEl.appendChild(el);
+  return t;
+}
+function paint(t) {
+  const digits = String(t.v).length;
+  t.el.className = 'tile ' + (t.v > 2048 ? 'super' : 'v' + t.v) + (digits >= 3 ? ' d' + Math.min(digits, 5) : '');
+  t.el.textContent = t.v;
+}
+function place(t) { t.el.style.setProperty('--r', t.r); t.el.style.setProperty('--c', t.c); }
+function emptyCells() {
+  const out = [];
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (!grid[r][c]) out.push([r, c]);
+  return out;
+}
+function addRandom() {
+  const cells = emptyCells();
+  if (!cells.length) return;
+  const [r, c] = cells[Math.floor(Math.random() * cells.length)];
+  grid[r][c] = makeTile(Math.random() < 0.9 ? 2 : 4, r, c, 'new');
+}
+function newGame() {
+  finish();
+  boardEl.querySelectorAll('.tile').forEach((el) => el.remove());
+  grid = Array.from({ length: N }, () => Array(N).fill(null));
+  score = 0; won = false; keepGoing = false; over = false;
+  $('overlay').hidden = true;
+  addRandom(); addRandom(); hud();
+}
+function hud() {
+  if (score > best) { best = score; store.set('2048-best', best); }
+  $('score').textContent = score; $('best').textContent = best;
+}
+// dir 방향 i번째 줄에서, 미는 쪽 끝부터 j번째 칸
+function cellAt(dir, i, j) {
+  if (dir === 'left') return [i, j];
+  if (dir === 'right') return [i, N - 1 - j];
+  if (dir === 'up') return [j, i];
+  return [N - 1 - j, i];
+}
+function move(dir) {
+  if (over || (won && !keepGoing)) return;
+  finish();
+  const next = Array.from({ length: N }, () => Array(N).fill(null));
+  const dead = [], grown = [];
+  let moved = false;
+  for (let i = 0; i < N; i++) {
+    let pos = 0, lastTile = null, lastMerged = false;
+    for (let j = 0; j < N; j++) {
+      const [r0, c0] = cellAt(dir, i, j), t = grid[r0][c0];
+      if (!t) continue;
+      if (lastTile && !lastMerged && lastTile.v === t.v) {
+        [t.r, t.c] = cellAt(dir, i, pos - 1);
+        lastTile.v *= 2; score += lastTile.v;
+        dead.push(t); grown.push(lastTile); lastMerged = true; moved = true;
+      } else {
+        const [r, c] = cellAt(dir, i, pos);
+        if (r !== t.r || c !== t.c) moved = true;
+        t.r = r; t.c = c; next[r][c] = t; lastTile = t; lastMerged = false; pos++;
+      }
+    }
+  }
+  if (!moved) return;
+  grid = next;
+  for (const t of dead) { t.el.classList.add('dead'); place(t); }
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (grid[r][c]) { grid[r][c].el.classList.remove('new', 'pop'); place(grid[r][c]); }
+  pending = { dead, grown, timer: setTimeout(finish, 105) };
+}
+function finish() {
+  if (!pending) return;
+  const { dead, grown, timer } = pending; pending = null;
+  clearTimeout(timer);
+  dead.forEach((t) => t.el.remove());
+  grown.forEach((t) => { paint(t); void t.el.offsetWidth; t.el.classList.add('pop'); });
+  addRandom(); hud();
+  if (!won && grown.some((t) => t.v === 2048)) { won = true; showOverlay('2048!', true); return; }
+  if (!canMove()) { over = true; showOverlay('게임 끝', false); }
+}
+function canMove() {
+  if (emptyCells().length) return true;
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const v = grid[r][c].v;
+    if ((c + 1 < N && grid[r][c + 1].v === v) || (r + 1 < N && grid[r + 1][c].v === v)) return true;
+  }
+  return false;
+}
+function showOverlay(title, isWin) {
+  $('ovTitle').textContent = title;
+  $('overlay').classList.toggle('win', isWin);
+  $('contBtn').hidden = !isWin;
+  $('overlay').hidden = false;
+}
+
+const KEYS = { ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right', ArrowUp: 'up', w: 'up', ArrowDown: 'down', s: 'down' };
+addEventListener('keydown', (e) => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (!KEYS[k] || e.metaKey || e.ctrlKey || e.altKey) return;
+  e.preventDefault(); move(KEYS[k]);
+});
+let sx = null, sy = null;
+boardEl.addEventListener('pointerdown', (e) => { sx = e.clientX; sy = e.clientY; });
+boardEl.addEventListener('pointerup', (e) => {
+  if (sx === null) return;
+  const dx = e.clientX - sx, dy = e.clientY - sy; sx = null;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+  move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+});
+boardEl.addEventListener('pointercancel', () => { sx = null; });
+$('newBtn').addEventListener('click', newGame);
+$('againBtn').addEventListener('click', newGame);
+$('contBtn').addEventListener('click', () => { keepGoing = true; $('overlay').hidden = true; });
+
+newGame();
+</script>
+</body>
+</html>
