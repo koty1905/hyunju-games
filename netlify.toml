@@ -1,0 +1,4 @@
+# 이 저장소 전체가 게임 사이트(hyunju-games)다. 빌드 없이 그대로 배포한다.
+[build]
+  publish = "."
+  command = ""
