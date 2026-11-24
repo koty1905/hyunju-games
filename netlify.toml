@@ -1,4 +1,5 @@
-# 이 저장소 전체가 게임 사이트(hyunju-games)다. 빌드 없이 그대로 배포한다.
+# 이 저장소 전체가 게임 사이트(hyunju-games)다. 빌드할 것은 없고 파일을 그대로 배포한다.
+# Netlify 화면에 예전 빌드 명령이 남아 있어도 이 명령이 우선한다.
 [build]
   publish = "."
-  command = ""
+  command = "echo '빌드 없이 그대로 배포합니다'"
